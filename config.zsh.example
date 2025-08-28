@@ -1,0 +1,43 @@
+#!/usr/bin/env zsh
+# Worktree Tools Configuration Example
+# Copy this file to ~/.config/worktree-tools/config.zsh and customize for your setup
+
+# =============================================================================
+# GIT WORKTREE CONFIGURATION
+# =============================================================================
+
+# Your git username and branch prefix
+GIT_USERNAME="your-username"
+BRANCH_PREFIX="your-username"
+
+# Base paths for your development setup
+BASE_DEV_PATH="$HOME/dev"
+BARE_REPOS_PATH="$BASE_DEV_PATH/.repos"
+WORKTREES_PATH="$BASE_DEV_PATH/worktrees"
+WORKTREE_TEMPLATES_PATH="$BASE_DEV_PATH/worktree_templates"
+
+# Repository shorthand mappings
+# Format: shorthand => full-repo-name
+declare -A REPO_MAPPINGS
+REPO_MAPPINGS[webapp]="MyCompany-WebApp"
+REPO_MAPPINGS[api]="MyCompany-API"
+REPO_MAPPINGS[mobile]="MyCompany-Mobile"
+REPO_MAPPINGS[lib]="MyCompany-Library"
+
+# =============================================================================
+# CI HELPER CONFIGURATION
+# =============================================================================
+
+# Define your repositories and their CI commands
+# Format: REPO_NAME => "build_cmd|test_cmd|lint_cmd"
+declare -A REPO_CONFIGS
+REPO_CONFIGS[MyCompany-WebApp]="npm run build|npm run test|npm run lint"
+REPO_CONFIGS[MyCompany-API]="go build|go test ./...|golangci-lint run"
+REPO_CONFIGS[MyCompany-Mobile-Android]="./gradlew assembleDebug|./gradlew testDebugUnitTest|./gradlew lintDebug detekt"
+REPO_CONFIGS[MyCompany-Mobile-iOS]="bundle exec fastlane build|bundle exec fastlane unit_tests|swiftlint --strict && swiftformat . --lint --strict"
+
+# Define modular components (optional)
+# Format: REPO_NAME => "module1 module2"
+declare -A REPO_MODULES
+REPO_MODULES[MyCompany-Mobile-Android]="core-module feature-module"
+REPO_MODULES[MyCompany-Library]="shared-utils common-models"
