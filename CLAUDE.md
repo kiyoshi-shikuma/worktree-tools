@@ -23,7 +23,10 @@ wt-add [<repo>] <branch-name>     # Create new worktree
 wt-list [<repo>]                  # List worktrees
 wt-switch [<repo>] <search>       # Switch to worktree
 wt-rm [<repo>] <worktree-name>    # Remove worktree
+wt-template-save [<repo>]         # Save current template files
+wt-template-load [<repo>]         # Load template files to worktree
 deps-link <repo>                  # Create dependency symlinks
+deps-rm                           # Remove all dependency symlinks
 ```
 
 ### CI/Build Commands (via zsh aliases)
@@ -32,6 +35,8 @@ ci                               # Run full CI pipeline
 test                            # Run tests only  
 lint                            # Run linting only
 ci_modules                      # Run CI for configured modules
+lint_modules                    # Run lint for configured modules only
+ide                             # Open appropriate IDE for current repo
 ```
 
 ## Architecture
@@ -45,8 +50,10 @@ worktree_templates/  # Template files for new worktrees
 ```
 
 ### Configuration Files
+- **config.zsh**: Main configuration file loaded by both plugins (placed in `~/.config/worktree-tools/`)
+- **config.zsh.example**: Template showing configuration format for new users
 - **git-worktree-helper.zsh**: Configure `REPO_MAPPINGS` for repository shorthands and paths
-- **ci-helper.zsh**: Configure `REPO_CONFIGS` for build/test/lint commands per repository
+- **ci-helper.zsh**: Configure `REPO_CONFIGS` for build/test/lint commands and `REPO_MODULES` for modular builds
 
 ### Worktree Workflow
 1. Bare repositories contain only remote-tracking refs (no local branches)
@@ -60,3 +67,6 @@ worktree_templates/  # Template files for new worktrees
 - Both zsh plugins use lazy loading for performance
 - Repository detection works via git remote URL or directory path matching
 - Templates and dependency symlinks support complex multi-repo development workflows
+- Branch names are automatically prefixed with user's configured prefix (e.g., `kiyoshi/feature-name`)
+- Commands support both explicit repository specification and auto-detection from current directory
+- Configuration is externalized to `~/.config/worktree-tools/config.zsh` for easy customization

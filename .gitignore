@@ -1,2 +1,5 @@
 # Personal configuration file
 config.zsh
+# Backup when uninstalling
+config.zsh.old
+.claude/

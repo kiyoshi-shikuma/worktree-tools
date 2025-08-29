@@ -30,14 +30,16 @@ REPO_MAPPINGS[lib]="MyCompany-Library"
 
 # Define your repositories and their CI commands
 # Format: REPO_NAME => "build_cmd|test_cmd|lint_cmd"
+# Modify these commands to match what your CI typically runs
 declare -A REPO_CONFIGS
 REPO_CONFIGS[MyCompany-WebApp]="npm run build|npm run test|npm run lint"
 REPO_CONFIGS[MyCompany-API]="go build|go test ./...|golangci-lint run"
-REPO_CONFIGS[MyCompany-Mobile-Android]="./gradlew assembleDebug|./gradlew testDebugUnitTest|./gradlew lintDebug detekt"
-REPO_CONFIGS[MyCompany-Mobile-iOS]="bundle exec fastlane build|bundle exec fastlane unit_tests|swiftlint --strict && swiftformat . --lint --strict"
+REPO_CONFIGS[MyCompany-Android]="./gradlew --quiet assembleDebug|./gradlew --quiet testDebugUnitTest|./gradlew --quiet lintDebug detekt"
+REPO_CONFIGS[MyCompany-iOS]="bundle exec fastlane build|bundle exec fastlane unit_tests|swiftlint --strict --reporter github-actions-logging && swiftformat . --lint --strict"
 
 # Define modular components (optional)
 # Format: REPO_NAME => "module1 module2"
+# For Android: Use gradle module names for module-specific CI commands
 declare -A REPO_MODULES
-REPO_MODULES[MyCompany-Mobile-Android]="core-module feature-module"
-REPO_MODULES[MyCompany-Library]="shared-utils common-models"
+REPO_MODULES[MyCompany-Android]="core-module feature-module ui-module"
+REPO_MODULES[MyCompany-Library]="shared-utils common-models data-layer"
