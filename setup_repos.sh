@@ -13,14 +13,21 @@ usage() {
 Usage: $(basename "$0") --repos "<repo1,repo2,...>" [--default-branch <branch>] [--no-initial-worktrees]
 
 <repo> can be:
-  - Git URL or local path (e.g., git@github.com:org/android.git)
+  - Git URL (e.g., git@github.com:org/android.git)
+  - Local path to existing git repo (relative or absolute, e.g., ../my-repo or /path/to/repo)
   - OR "<URL-or-path>:<branch>" to override the default branch for that repo.
     (The *last* colon is used as the separator, so scp-style SSH is safe.)
+
+Branch resolution order (when no explicit override is given):
+  1) Explicit per-repo override (repo:branch syntax)
+  2) --default-branch value if specified
+  3) Remote HEAD (origin/HEAD)
+  4) Common branches in order: develop, main, master
 
 Examples:
   $(basename "$0") --repos "git@github.com:org/android.git,git@github.com:org/ios.git"
   $(basename "$0") --repos "git@github.com:org/android.git:release/2.x,git@github.com:org/ios.git" --default-branch develop
-  $(basename "$0") --repos "/src/ios-lib.git:main" --no-initial-worktrees
+  $(basename "$0") --repos "/src/ios-lib.git:main,../existing-repo:develop" --no-initial-worktrees
 
 Creates in the current directory:
   ./.repos/<name>.git              (bare repos; no local branches)
@@ -103,7 +110,7 @@ parse_repo_item() {
 # 1) explicit override (if exists)
 # 2) global DEFAULT_BRANCH (if exists)
 # 3) origin/HEAD
-# 4) main, then master
+# 4) develop, main, then master
 resolve_base_branch() {
   local bare="$1"
   local explicit="${2:-}"
@@ -121,7 +128,7 @@ resolve_base_branch() {
       echo "${headref##refs/remotes/origin/}"; return 0
     fi
   fi
-  for fb in main master; do
+  for fb in develop main master; do
     if git -C "$bare" show-ref --verify --quiet "refs/remotes/origin/$fb"; then
       echo "$fb"; return 0
     fi
@@ -133,10 +140,35 @@ resolve_base_branch() {
 init_bare_repo_no_locals() {
   local bare="$1"
   local remote="$2"
+  
+  # Expand tilde in remote path if present
+  remote="${remote/#\~/$HOME}"
 
   if [[ ! -d "$bare" ]]; then
-    git init --bare "$bare"
-    git -C "$bare" remote add origin "$remote"
+    if [[ -d "$remote" ]]; then
+      # Local path: clone from existing repo
+      git clone --bare "$remote" "$bare"
+      
+      # Copy the original remote URL from the source repo
+      local original_remote
+      original_remote=$(git -C "$remote" remote get-url origin 2>/dev/null || true)
+      if [[ -n "$original_remote" ]]; then
+        git -C "$bare" remote set-url origin "$original_remote"
+      fi
+    else
+      # Remote URL: initialize and add remote
+      git init --bare "$bare"
+      git -C "$bare" remote add origin "$remote"
+    fi
+  fi
+
+  # For local repos, ensure we have the right remote config
+  if [[ -d "$remote" ]]; then
+    local original_remote
+    original_remote=$(git -C "$remote" remote get-url origin 2>/dev/null || true)
+    if [[ -n "$original_remote" ]]; then
+      git -C "$bare" remote set-url origin "$original_remote" >/dev/null 2>&1 || true
+    fi
   fi
 
   # Normalize refspec (avoid accidental locals)
@@ -199,15 +231,23 @@ for raw in "${REPO_ITEMS[@]}"; do
     if [[ -d "$WT_DIR" ]]; then
       echo "Worktree exists: $WT_DIR"
     else
-      # First local branch is created here (not at clone time)
-      if git -C "$BARE" show-ref --verify --quiet "refs/remotes/origin/$BASE_BRANCH"; then
+      # Create worktree, using existing local branch if available
+      if git -C "$BARE" show-ref --verify --quiet "refs/heads/$BASE_BRANCH"; then
+        # Local branch exists, use it directly
+        git -C "$BARE" worktree add "$WT_DIR" "$BASE_BRANCH"
+      elif git -C "$BARE" show-ref --verify --quiet "refs/remotes/origin/$BASE_BRANCH"; then
+        # Remote branch exists, create tracking local branch
         git -C "$BARE" worktree add --track -b "$BASE_BRANCH" "$WT_DIR" "origin/$BASE_BRANCH"
       else
         # fall back to origin/HEAD if base not present
         git -C "$BARE" remote set-head origin -a >/dev/null 2>&1 || true
         HEAD_BRANCH="$(git -C "$BARE" symbolic-ref -q refs/remotes/origin/HEAD | sed 's#^refs/remotes/origin/##' || true)"
         if [[ -n "$HEAD_BRANCH" ]]; then
-          git -C "$BARE" worktree add --track -b "$BASE_BRANCH" "$WT_DIR" "origin/$HEAD_BRANCH"
+          if git -C "$BARE" show-ref --verify --quiet "refs/heads/$BASE_BRANCH"; then
+            git -C "$BARE" worktree add "$WT_DIR" "$BASE_BRANCH"
+          else
+            git -C "$BARE" worktree add --track -b "$BASE_BRANCH" "$WT_DIR" "origin/$HEAD_BRANCH"
+          fi
         else
           echo "ERROR: Could not resolve any base branch for $NAME" >&2
           exit 1
