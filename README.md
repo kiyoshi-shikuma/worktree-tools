@@ -15,23 +15,25 @@ A set of shell scripts and Oh My Zsh plugins for managing git worktrees and CI w
 
 ### 1. Clone and Setup Repositories
 
-First, clone this repository and set up your bare repositories:
+First, navigate to where you want your worktree root directory (e.g., `~/dev`), then clone this repository and set up your bare repositories:
 
 ```bash
+# Navigate to your desired worktree root
+cd ~/dev  # or wherever you want your worktree structure
+
 # Clone the worktree tools
 git clone <this-repo-url> worktree-tools
-cd worktree-tools
 
-# Setup repositories - choose one approach:
+# Setup repositories from the worktree root - choose one approach:
 
 # Option A: Remote repositories
-./setup_repos.sh --repos "git@github.com:your-org/android.git,git@github.com:your-org/ios.git"
+./worktree-tools/setup_repos.sh --repos "git@github.com:your-org/android.git,git@github.com:your-org/ios.git"
 
 # Option B: Local repositories
-./setup_repos.sh --repos "/path/to/existing/android-repo,/path/to/existing/ios-repo"
+./worktree-tools/setup_repos.sh --repos "/path/to/existing/android-repo,/path/to/existing/ios-repo"
 
 # Option C: Mixed with custom default branches (options A and B will check for develop, main, and master)
-./setup_repos.sh --repos "git@github.com:your-org/android.git:main2,/path/to/ios-repo:main3" --default-branch main4
+./worktree-tools/setup_repos.sh --repos "git@github.com:your-org/android.git:main2,/path/to/ios-repo:main3" --default-branch main4
 ```
 
 ### 2. Install Oh My Zsh Plugins
@@ -39,7 +41,8 @@ cd worktree-tools
 Install the worktree management and CI helper plugins:
 
 ```bash
-# Install plugins and create config
+# Install plugins and create config (from the worktree-tools directory)
+cd worktree-tools
 make install
 
 # Follow the prompts to:
@@ -234,10 +237,14 @@ deps-link library
 ### Multi-Repository Development Workflow
 
 ```bash
+# Navigate to desired worktree root
+cd ~/dev
+
 # Setup repositories
-./setup_repos.sh --repos "git@github.com:company/android.git,git@github.com:company/ios.git,git@github.com:company/shared-lib.git"
+./worktree-tools/setup_repos.sh --repos "git@github.com:company/android.git,git@github.com:company/ios.git,git@github.com:company/shared-lib.git"
 
 # Install tools
+cd worktree-tools
 make install
 # Edit ~/.config/worktree-tools/config.zsh
 exec zsh
@@ -267,8 +274,11 @@ ide         # Open Xcode
 ### Working with Existing Local Repositories
 
 ```bash
+# Navigate to desired worktree root
+cd ~/dev
+
 # You have existing repos at /src/mobile-android and /src/mobile-ios
-./setup_repos.sh --repos "/src/mobile-android,/src/mobile-ios"
+./worktree-tools/setup_repos.sh --repos "/src/mobile-android,/src/mobile-ios"
 
 # This creates bare clones while preserving your original repos
 # The bare repos will use the same remote URLs as your originals
