@@ -140,8 +140,11 @@ _define_ci_helper_functions() {
     check_repo() {
         local repo=$(detect_repo)
         if [[ -z $repo ]]; then
-            echo "❌ Error: Not in a configured repository"
-            echo "This script must be run from one of these repositories:"
+            local current_dir=$(pwd)
+            echo "❌ Error: This command does not work in an unregistered repository."
+            echo "Please add this repository to the REPO_CONFIGS in ~/.config/worktree-tools/config.zsh"
+            echo ""
+            echo "This command currently works in these registered repositories:"
             for repo in ${(k)REPO_CONFIGS[@]}; do
                 echo "  - $repo"
             done

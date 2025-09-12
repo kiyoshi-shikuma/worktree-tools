@@ -103,8 +103,11 @@ _define_git_worktree_functions() {
             if [[ -n $detected_repo ]]; then
                 echo $detected_repo
             else
-                echo "❌ Unknown repository shorthand: $shorthand"
-                echo "Available shorthands: ${(k)REPO_MAPPINGS[@]}"
+                echo "❌ Unknown repository shorthand: '$shorthand'"
+                echo "Available configured repositories:"
+                for repo_short repo_full in ${(kv)REPO_MAPPINGS[@]}; do
+                    echo "  $repo_short -> $repo_full"
+                done
                 echo "Or run from within a configured repository directory"
                 return 1
             fi
@@ -132,9 +135,13 @@ _define_git_worktree_functions() {
                 repo_shorthand=$detected_repo
                 branch_name=$first_arg
             else
-                echo "❌ Error: Could not determine repository"
-                echo "Either provide a repository shorthand (${(k)REPO_MAPPINGS[@]})"
-                echo "or run from within a configured repository directory"
+                local current_dir=$(pwd)
+                echo "❌ Error: Could not recognize repository from current directory: $current_dir"
+                echo "Either provide a repository shorthand or run from within a configured repository directory"
+                echo "Available configured repositories:"
+                for repo_short repo_full in ${(kv)REPO_MAPPINGS[@]}; do
+                    echo "  $repo_short -> $repo_full"
+                done
                 return 1
             fi
         fi
@@ -272,9 +279,13 @@ _define_git_worktree_functions() {
             if [[ -n $detected_repo ]]; then
                 repo_shorthand=$detected_repo
             else
-                echo "❌ Error: Could not determine repository"
-                echo "Either provide a repository shorthand (${(k)REPO_MAPPINGS[@]})"
-                echo "or run from within a configured repository directory"
+                local current_dir=$(pwd)
+                echo "❌ Error: Could not recognize repository from current directory: $current_dir"
+                echo "Either provide a repository shorthand or run from within a configured repository directory"
+                echo "Available configured repositories:"
+                for repo_short repo_full in ${(kv)REPO_MAPPINGS[@]}; do
+                    echo "  $repo_short -> $repo_full"
+                done
                 return 1
             fi
         fi
@@ -456,9 +467,13 @@ _define_git_worktree_functions() {
                 repo_shorthand=$detected_repo
                 search_string=$first_arg
             else
-                echo "❌ Error: Could not determine repository"
-                echo "Either provide a repository shorthand (${(k)REPO_MAPPINGS[@]})"
-                echo "or run from within a configured repository directory"
+                local current_dir=$(pwd)
+                echo "❌ Error: Could not recognize repository from current directory: $current_dir"
+                echo "Either provide a repository shorthand or run from within a configured repository directory"
+                echo "Available configured repositories:"
+                for repo_short repo_full in ${(kv)REPO_MAPPINGS[@]}; do
+                    echo "  $repo_short -> $repo_full"
+                done
                 return 1
             fi
         fi
@@ -538,9 +553,13 @@ _define_git_worktree_functions() {
                 repo_shorthand=$detected_repo
                 worktree_name=$first_arg
             else
-                echo "❌ Error: Could not determine repository"
-                echo "Either provide a repository shorthand (${(k)REPO_MAPPINGS[@]})"
-                echo "or run from within a configured repository directory"
+                local current_dir=$(pwd)
+                echo "❌ Error: Could not recognize repository from current directory: $current_dir"
+                echo "Either provide a repository shorthand or run from within a configured repository directory"
+                echo "Available configured repositories:"
+                for repo_short repo_full in ${(kv)REPO_MAPPINGS[@]}; do
+                    echo "  $repo_short -> $repo_full"
+                done
                 return 1
             fi
         fi
@@ -636,9 +655,13 @@ _define_git_worktree_functions() {
             if [[ -n $detected_repo ]]; then
                 repo_shorthand=$detected_repo
             else
-                echo "❌ Error: Could not determine repository"
-                echo "Either provide a repository shorthand (${(k)REPO_MAPPINGS[@]})"
-                echo "or run from within a configured repository directory"
+                local current_dir=$(pwd)
+                echo "❌ Error: Could not recognize repository from current directory: $current_dir"
+                echo "Either provide a repository shorthand or run from within a configured repository directory"
+                echo "Available configured repositories:"
+                for repo_short repo_full in ${(kv)REPO_MAPPINGS[@]}; do
+                    echo "  $repo_short -> $repo_full"
+                done
                 return 1
             fi
         fi
@@ -701,9 +724,13 @@ _define_git_worktree_functions() {
             if [[ -n $detected_repo ]]; then
                 repo_shorthand=$detected_repo
             else
-                echo "❌ Error: Could not determine repository"
-                echo "Either provide a repository shorthand (${(k)REPO_MAPPINGS[@]})"
-                echo "or run from within a configured repository directory"
+                local current_dir=$(pwd)
+                echo "❌ Error: Could not recognize repository from current directory: $current_dir"
+                echo "Either provide a repository shorthand or run from within a configured repository directory"
+                echo "Available configured repositories:"
+                for repo_short repo_full in ${(kv)REPO_MAPPINGS[@]}; do
+                    echo "  $repo_short -> $repo_full"
+                done
                 return 1
             fi
         fi
