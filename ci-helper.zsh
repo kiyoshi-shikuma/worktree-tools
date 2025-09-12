@@ -10,11 +10,14 @@
 
 # Configuration will be loaded from ~/.config/worktree-tools/config.zsh
 # If not found, defaults below will be used
-declare -A REPO_CONFIGS
-declare -A REPO_MODULES
+# Note: Arrays are initialized in _load_ci_config to avoid redeclaration issues
 
 # Default configuration (used as fallback)
 _load_default_config() {
+    # Initialize arrays if not already done
+    [[ -z ${(t)REPO_CONFIGS} ]] && declare -gA REPO_CONFIGS
+    [[ -z ${(t)REPO_MODULES} ]] && declare -gA REPO_MODULES
+    
     # Define your repositories and their CI commands
     # Format: REPO_NAME => "build_cmd|test_cmd|lint_cmd"
     REPO_CONFIGS[MyApp-Android]="./gradlew assembleDebug|./gradlew testDebugUnitTest|./gradlew lintDebug detekt"
@@ -34,6 +37,11 @@ _ci_helper_loaded=false
 
 # Load configuration from external file
 _load_ci_config() {
+    # Initialize associative arrays
+    declare -gA REPO_CONFIGS
+    declare -gA REPO_MODULES
+    declare -gA REPO_IDE_CONFIGS
+    
     local config_file="$HOME/.config/worktree-tools/config.zsh"
     
     if [[ -f "$config_file" ]]; then
@@ -304,6 +312,26 @@ _define_ci_helper_functions() {
         fi
     }
 
+    # Function to get IDE configuration for a repository
+    get_ide_config() {
+        local repo=$1
+        local field=$2  # ide_type, workspace_path, or fallback_command
+        
+        local config="${REPO_IDE_CONFIGS[$repo]}"
+        case $field in
+            "ide_type")
+                echo "${config%%|*}"
+                ;;
+            "workspace_path")
+                local temp="${config#*|}"
+                echo "${temp%%|*}"
+                ;;
+            "fallback_command")
+                echo "${config##*|}"
+                ;;
+        esac
+    }
+
     # Function to open IDE for current repository
     open_ide() {
         local repo=$(check_repo)
@@ -324,42 +352,108 @@ _define_ci_helper_functions() {
 
         echo "💻 Opening IDE for $repo..."
 
-        # Simple heuristics for IDE selection
-        if [[ -f "$git_root/gradlew" ]] || [[ -f "$git_root/build.gradle" ]]; then
-            # Android/Gradle project
-            echo "📱 Opening Android Studio..."
-            if command -v studio &> /dev/null; then
-                studio "$git_root" &
-            elif [[ -d "/Applications/Android Studio.app" ]]; then
-                open -a "Android Studio" "$git_root"
-            else
-                echo "❌ Android Studio not found"
-                return 1
-            fi
-        elif [[ -f "$git_root/Package.swift" ]]; then
-            # Swift Package
-            echo "🍎 Opening Xcode for Swift Package..."
-            local workspace_path="$git_root/.swiftpm/xcode/package.xcworkspace"
-            if [[ -d "$workspace_path" ]]; then
-                open "$workspace_path"
-            else
-                echo "💡 Opening Package.swift in Xcode"
-                open "$git_root/Package.swift"
-            fi
-        elif [[ -f "$git_root"/*.xcworkspace ]]; then
-            # Xcode workspace
-            echo "🍎 Opening Xcode workspace..."
-            open "$git_root"/*.xcworkspace
-        elif [[ -f "$git_root"/*.xcodeproj ]]; then
-            # Xcode project
-            echo "🍎 Opening Xcode project..."
-            open "$git_root"/*.xcodeproj
+        # Check if repository has specific IDE configuration
+        local ide_type=$(get_ide_config $repo "ide_type")
+        local workspace_path=$(get_ide_config $repo "workspace_path")
+        local fallback_command=$(get_ide_config $repo "fallback_command")
+
+        if [[ -n $ide_type ]]; then
+            # Use configured IDE type
+            case $ide_type in
+                "android-studio")
+                    echo "📱 Opening Android Studio..."
+                    if command -v studio &> /dev/null; then
+                        studio "$git_root" &
+                    elif [[ -d "/Applications/Android Studio.app" ]]; then
+                        open -a "Android Studio" "$git_root"
+                    else
+                        echo "❌ Android Studio not found"
+                        return 1
+                    fi
+                    echo "✅ Android Studio opening in $git_root"
+                    ;;
+                "xcode-workspace")
+                    echo "🍎 Opening Xcode workspace..."
+                    local full_workspace_path="$git_root/$workspace_path"
+                    if [[ -d "$full_workspace_path" ]]; then
+                        open "$full_workspace_path"
+                        echo "✅ Xcode opening $full_workspace_path"
+                    else
+                        echo "❌ $workspace_path not found at $full_workspace_path"
+                        if [[ -n $fallback_command ]]; then
+                            echo "💡 Try running '$fallback_command'"
+                        fi
+                        return 1
+                    fi
+                    ;;
+                "xcode-package")
+                    echo "🍎 Opening Xcode for Swift Package..."
+                    local full_workspace_path="$git_root/$workspace_path"
+                    if [[ -d "$full_workspace_path" ]]; then
+                        open "$full_workspace_path"
+                        echo "✅ Xcode opening $full_workspace_path"
+                    else
+                        echo "❌ $workspace_path not found at $full_workspace_path"
+                        if [[ -n $fallback_command ]]; then
+                            echo "💡 Try running '$fallback_command' or opening Package.swift in Xcode first"
+                        fi
+                        return 1
+                    fi
+                    ;;
+                "vscode")
+                    echo "🌐 Opening VS Code..."
+                    if command -v code &> /dev/null; then
+                        code "$git_root"
+                        echo "✅ VS Code opening $git_root"
+                    else
+                        echo "🤔 VS Code not found, opening in default editor..."
+                        open "$git_root"
+                    fi
+                    ;;
+                *)
+                    echo "❌ Unknown IDE type: $ide_type"
+                    return 1
+                    ;;
+            esac
         else
-            echo "🤔 Unknown project type, opening in default editor..."
-            if command -v code &> /dev/null; then
-                code "$git_root"
+            # Fallback: Generic heuristics for IDE selection
+            echo "🔍 No IDE configuration found, using heuristics..."
+            if [[ -f "$git_root/gradlew" ]] || [[ -f "$git_root/build.gradle" ]]; then
+                # Android/Gradle project
+                echo "📱 Opening Android Studio..."
+                if command -v studio &> /dev/null; then
+                    studio "$git_root" &
+                elif [[ -d "/Applications/Android Studio.app" ]]; then
+                    open -a "Android Studio" "$git_root"
+                else
+                    echo "❌ Android Studio not found"
+                    return 1
+                fi
+            elif [[ -f "$git_root/Package.swift" ]]; then
+                # Swift Package
+                echo "🍎 Opening Xcode for Swift Package..."
+                local workspace_path="$git_root/.swiftpm/xcode/package.xcworkspace"
+                if [[ -d "$workspace_path" ]]; then
+                    open "$workspace_path"
+                else
+                    echo "💡 Opening Package.swift in Xcode"
+                    open "$git_root/Package.swift"
+                fi
+            elif [[ -f "$git_root"/*.xcworkspace ]]; then
+                # Xcode workspace
+                echo "🍎 Opening Xcode workspace..."
+                open "$git_root"/*.xcworkspace
+            elif [[ -f "$git_root"/*.xcodeproj ]]; then
+                # Xcode project
+                echo "🍎 Opening Xcode project..."
+                open "$git_root"/*.xcodeproj
             else
-                open "$git_root"
+                echo "🤔 Unknown project type, opening in default editor..."
+                if command -v code &> /dev/null; then
+                    code "$git_root"
+                else
+                    open "$git_root"
+                fi
             fi
         fi
     }

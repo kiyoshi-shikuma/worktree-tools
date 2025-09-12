@@ -11,18 +11,19 @@ GIT_USERNAME="your-username"
 BRANCH_PREFIX="your-username"
 
 # Base paths for your development setup
-BASE_DEV_PATH="$HOME/dev"
+BASE_DEV_PATH="$HOME/company/mobile"
 BARE_REPOS_PATH="$BASE_DEV_PATH/.repos"
 WORKTREES_PATH="$BASE_DEV_PATH/worktrees"
 WORKTREE_TEMPLATES_PATH="$BASE_DEV_PATH/worktree_templates"
 
 # Repository shorthand mappings
 # Format: shorthand => full-repo-name
-declare -A REPO_MAPPINGS
-REPO_MAPPINGS[webapp]="MyCompany-WebApp"
-REPO_MAPPINGS[api]="MyCompany-API"
-REPO_MAPPINGS[mobile]="MyCompany-Mobile"
-REPO_MAPPINGS[lib]="MyCompany-Library"
+# Note: REPO_MAPPINGS declaration is handled by git-worktree-helper.zsh
+[[ -z ${(t)REPO_MAPPINGS} ]] && declare -gA REPO_MAPPINGS
+REPO_MAPPINGS[acmd]="Company-Android"
+REPO_MAPPINGS[alib]="Company-Android-Library"
+REPO_MAPPINGS[icmd]="Company-iOS"
+REPO_MAPPINGS[ilib]="Company-iOS-Library"
 
 # =============================================================================
 # CI HELPER CONFIGURATION
@@ -30,16 +31,31 @@ REPO_MAPPINGS[lib]="MyCompany-Library"
 
 # Define your repositories and their CI commands
 # Format: REPO_NAME => "build_cmd|test_cmd|lint_cmd"
-# Modify these commands to match what your CI typically runs
-declare -A REPO_CONFIGS
-REPO_CONFIGS[MyCompany-WebApp]="npm run build|npm run test|npm run lint"
-REPO_CONFIGS[MyCompany-API]="go build|go test ./...|golangci-lint run"
-REPO_CONFIGS[MyCompany-Android]="./gradlew --quiet assembleDebug|./gradlew --quiet testDebugUnitTest|./gradlew --quiet lintDebug detekt"
-REPO_CONFIGS[MyCompany-iOS]="bundle exec fastlane build|bundle exec fastlane unit_tests|swiftlint --strict --reporter github-actions-logging && swiftformat . --lint --strict"
+# Note: REPO_CONFIGS declaration is handled by ci-helper.zsh
+REPO_CONFIGS[Company-Android]="./gradlew --quiet assembleDebug|./gradlew --quiet testDebugUnitTest validateDebugScreenshotTest|./gradlew --quiet lintDebug detekt"
+REPO_CONFIGS[Company-Android-Library]="./gradlew --quiet assembleDebug|./gradlew --quiet testDebugUnitTest validateDebugScreenshotTest|./gradlew --quiet lintDebug detekt"
+REPO_CONFIGS[Company-iOS]="bundle exec fastlane build|bundle exec fastlane unit_tests|swiftlint --strict --reporter github-actions-logging && swiftformat . --lint --strict --reporter github-actions-log"
+REPO_CONFIGS[Company-iOS-Library]="bundle exec fastlane build|bundle exec fastlane unit_tests_ios|swiftlint --strict --reporter github-actions-logging && swiftformat . --lint --strict --reporter github-actions-log"
+REPO_CONFIGS[Company-Web]="npm run build|npm test|npm run lint"
 
-# Define modular components (optional)
+# Define modular components (optional)  
 # Format: REPO_NAME => "module1 module2"
-# For Android: Use gradle module names for module-specific CI commands
-declare -A REPO_MODULES
-REPO_MODULES[MyCompany-Android]="core-module feature-module ui-module"
-REPO_MODULES[MyCompany-Library]="shared-utils common-models data-layer"
+# Note: REPO_MODULES declaration is handled by ci-helper.zsh
+REPO_MODULES[Company-Android]="module-core module-outputs"
+REPO_MODULES[Company-Android-Library]="module-shared module-models"
+
+# =============================================================================
+# IDE CONFIGURATION
+# =============================================================================
+
+# Define IDE-specific configurations for repositories
+# Format: REPO_NAME => "ide_type|workspace_path|fallback_command"
+# ide_type: android-studio, xcode-workspace, xcode-package, vscode, default
+# workspace_path: specific path pattern (relative to git root)
+# fallback_command: optional fallback if workspace not found
+# Note: REPO_IDE_CONFIGS declaration is handled by ci-helper.zsh
+REPO_IDE_CONFIGS[Company-Android]="android-studio||"
+REPO_IDE_CONFIGS[Company-Android-Library]="android-studio||"
+REPO_IDE_CONFIGS[Company-iOS]="xcode-workspace|Company-iOS.xcworkspace|"
+REPO_IDE_CONFIGS[Company-iOS-Library]="xcode-package|.swiftpm/xcode/package.xcworkspace|swift package generate-xcodeproj"
+REPO_IDE_CONFIGS[Company-Web]="vscode||"
