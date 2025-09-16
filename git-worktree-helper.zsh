@@ -216,10 +216,12 @@ _define_git_worktree_functions() {
                 echo "📝 Local branch '$prefixed_branch' already exists, using existing branch"
                 git -C "$bare_repo_path" worktree add "$worktree_path" "$prefixed_branch"
             else
-                # Create worktree with new local branch based on main/master
+                # Create worktree with new local branch based on main/master/develop
                 local main_branch="main"
                 if git -C "$bare_repo_path" show-ref --verify --quiet "refs/remotes/origin/master"; then
                     main_branch="master"
+                elif git -C "$bare_repo_path" show-ref --verify --quiet "refs/remotes/origin/develop"; then
+                    main_branch="develop"
                 fi
                 echo "🌱 Creating worktree with new local branch from origin/$main_branch"
                 git -C "$bare_repo_path" worktree add "$worktree_path" -b "$prefixed_branch" "origin/$main_branch"
