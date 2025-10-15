@@ -6,11 +6,12 @@ CONFIG_DIR = $(HOME)/.config/worktree-tools
 CONFIG_FILE = $(CONFIG_DIR)/config.zsh
 OH_MY_ZSH_CUSTOM = $(HOME)/.oh-my-zsh/custom
 CURRENT_DIR = $(shell pwd)
+SRC_DIR = $(CURRENT_DIR)/src
 
 # Plugin files to symlink
 PLUGINS = git-worktree-helper.zsh ci-helper.zsh
 
-.PHONY: help install uninstall check-install check-uninstall
+.PHONY: help install uninstall check-install check-uninstall test
 
 help:
 	@echo "Worktree Tools Makefile"
@@ -18,6 +19,7 @@ help:
 	@echo "Available targets:"
 	@echo "  install    - Install worktree tools (config + oh-my-zsh plugins)"
 	@echo "  uninstall  - Uninstall worktree tools (backup config, remove symlinks)"
+	@echo "  test       - Run all tests (shell + Python)"
 	@echo "  help       - Show this help message"
 	@echo ""
 	@echo "Installation creates:"
@@ -76,13 +78,13 @@ install: check-install
 	
 	# Copy example config to actual config
 	@echo "📋 Copying config template: config.zsh.example -> $(CONFIG_FILE)"
-	@cp "$(CURRENT_DIR)/config.zsh.example" "$(CONFIG_FILE)"
-	
+	@cp "$(SRC_DIR)/config.zsh.example" "$(CONFIG_FILE)"
+
 	# Create symlinks for oh-my-zsh plugins
 	@echo "🔗 Creating oh-my-zsh plugin symlinks:"
 	@for plugin in $(PLUGINS); do \
-		echo "  🔗 $(CURRENT_DIR)/$$plugin -> $(OH_MY_ZSH_CUSTOM)/$$plugin"; \
-		ln -sf "$(CURRENT_DIR)/$$plugin" "$(OH_MY_ZSH_CUSTOM)/$$plugin"; \
+		echo "  🔗 $(SRC_DIR)/$$plugin -> $(OH_MY_ZSH_CUSTOM)/$$plugin"; \
+		ln -sf "$(SRC_DIR)/$$plugin" "$(OH_MY_ZSH_CUSTOM)/$$plugin"; \
 	done
 	
 	@echo ""
@@ -145,3 +147,23 @@ uninstall: check-uninstall
 	@echo "🔄 Restart your shell or run 'exec zsh' to complete removal"
 	@echo ""
 	@echo "💡 To reinstall: make install"
+
+test:
+	@echo "🧪 Running all tests..."
+	@echo ""
+	@echo "Running migration tests..."
+	@./tests/test_migrations.sh
+	@echo ""
+	@echo "Running setup repository tests..."
+	@./tests/test_setup_repos.sh
+	@echo ""
+	@echo "Running zsh plugin tests..."
+	@./tests/test_zsh_plugins.sh
+	@echo ""
+	@echo "Running Python normalize config tests..."
+	@python3 scripts/test_normalize_config.py
+	@echo ""
+	@echo "Running Python validate config tests..."
+	@python3 scripts/test_validate_config.py
+	@echo ""
+	@echo "✅ All test suites completed successfully!"

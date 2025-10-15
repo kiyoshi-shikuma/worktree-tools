@@ -234,26 +234,42 @@ for raw in "${REPO_ITEMS[@]}"; do
       # Create worktree, using existing local branch if available
       if git -C "$BARE" show-ref --verify --quiet "refs/heads/$BASE_BRANCH"; then
         # Local branch exists, use it directly
-        git -C "$BARE" worktree add "$WT_DIR" "$BASE_BRANCH"
+        echo "Using existing local branch: $BASE_BRANCH"
+        if git -C "$BARE" worktree add "$WT_DIR" "$BASE_BRANCH"; then
+          echo "✅ Added worktree: $WT_DIR"
+        else
+          echo "ERROR: Failed to create worktree for existing branch $BASE_BRANCH" >&2
+          exit 1
+        fi
       elif git -C "$BARE" show-ref --verify --quiet "refs/remotes/origin/$BASE_BRANCH"; then
         # Remote branch exists, create tracking local branch
-        git -C "$BARE" worktree add --track -b "$BASE_BRANCH" "$WT_DIR" "origin/$BASE_BRANCH"
+        echo "Creating local branch $BASE_BRANCH tracking origin/$BASE_BRANCH"
+        if git -C "$BARE" worktree add -b "$BASE_BRANCH" "$WT_DIR" "origin/$BASE_BRANCH"; then
+          echo "✅ Added worktree: $WT_DIR"
+        else
+          echo "ERROR: Failed to create worktree with new branch $BASE_BRANCH" >&2
+          exit 1
+        fi
       else
         # fall back to origin/HEAD if base not present
+        echo "Branch $BASE_BRANCH not found, falling back to remote default branch..."
         git -C "$BARE" remote set-head origin -a >/dev/null 2>&1 || true
         HEAD_BRANCH="$(git -C "$BARE" symbolic-ref -q refs/remotes/origin/HEAD | sed 's#^refs/remotes/origin/##' || true)"
         if [[ -n "$HEAD_BRANCH" ]]; then
-          if git -C "$BARE" show-ref --verify --quiet "refs/heads/$BASE_BRANCH"; then
-            git -C "$BARE" worktree add "$WT_DIR" "$BASE_BRANCH"
+          echo "Creating branch $BASE_BRANCH from origin/$HEAD_BRANCH"
+          if git -C "$BARE" worktree add -b "$BASE_BRANCH" "$WT_DIR" "origin/$HEAD_BRANCH"; then
+            echo "✅ Added worktree: $WT_DIR"
           else
-            git -C "$BARE" worktree add --track -b "$BASE_BRANCH" "$WT_DIR" "origin/$HEAD_BRANCH"
+            echo "ERROR: Failed to create worktree from origin/$HEAD_BRANCH" >&2
+            exit 1
           fi
         else
           echo "ERROR: Could not resolve any base branch for $NAME" >&2
+          echo "Available remote branches:" >&2
+          git -C "$BARE" branch -r >&2
           exit 1
         fi
       fi
-      echo "Added worktree: $WT_DIR"
     fi
   else
     echo "(Skipping initial worktree creation)"

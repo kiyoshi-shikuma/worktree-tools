@@ -3,3 +3,9 @@ config.zsh
 # Backup when uninstalling
 config.zsh.old
 .claude/
+# Agent workspace (but keep docs/)
+.agents_workspace/
+!.agents_workspace/docs/
+# Python
+__pycache__/
+*.pyc

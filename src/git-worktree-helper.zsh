@@ -12,8 +12,8 @@
 # If not found, defaults below will be used
 
 # Default configuration variables
-GIT_USERNAME="your-username"
-BRANCH_PREFIX="your-username"
+GIT_USERNAME="${USER}"
+BRANCH_PREFIX="${USER}"
 BASE_DEV_PATH="$HOME/dev"
 BARE_REPOS_PATH="$BASE_DEV_PATH/.repos"
 WORKTREES_PATH="$BASE_DEV_PATH/worktrees"
@@ -24,8 +24,8 @@ _load_default_worktree_config() {
     # Initialize array if not already declared
     [[ -z ${(t)REPO_MAPPINGS} ]] && declare -gA REPO_MAPPINGS
     # Your git username and branch prefix
-    GIT_USERNAME="your-username"
-    BRANCH_PREFIX="your-username"
+    GIT_USERNAME="${USER}"
+    BRANCH_PREFIX="${USER}"
 
     # Base paths for your development setup
     BASE_DEV_PATH="$HOME/dev"
@@ -156,10 +156,10 @@ _define_git_worktree_functions() {
             return 1
         fi
 
-        # Check for "/" character in branch name
-        if [[ $branch_name == *"/"* ]]; then
-            echo "❌ Error: Branch name cannot contain '/' character"
-            echo "The branch prefix '$BRANCH_PREFIX' will already be prepended to your branch name"
+        # Check for "/" character in branch name (only if using a prefix)
+        if [[ -n $BRANCH_PREFIX && $branch_name == *"/"* ]]; then
+            echo "❌ Error: Branch name cannot contain '/' character when using a branch prefix"
+            echo "The branch prefix '$BRANCH_PREFIX' will be prepended to your branch name"
             echo "Your final branch will be: $BRANCH_PREFIX/$branch_name"
             return 1
         fi
@@ -188,8 +188,13 @@ _define_git_worktree_functions() {
         # Create worktree directory if it doesn't exist
         mkdir -p "$(dirname "$worktree_path")"
 
-        # Prefix branch with branch prefix
-        local prefixed_branch="$BRANCH_PREFIX/$branch_name"
+        # Prefix branch with branch prefix (if configured)
+        local prefixed_branch
+        if [[ -n $BRANCH_PREFIX ]]; then
+            prefixed_branch="$BRANCH_PREFIX/$branch_name"
+        else
+            prefixed_branch="$branch_name"
+        fi
 
         echo "🌳 Creating worktree for $repo_name..."
         echo "📁 Bare repo: $bare_repo_path"
@@ -314,25 +319,34 @@ _define_git_worktree_functions() {
         fi
 
         echo "📋 Worktrees for $repo_name:"
-        
+
+        # Resolve WORKTREES_PATH to canonical path for comparison (handles symlinks like /var -> /private/var on macOS)
+        local canonical_worktrees_path
+        if [[ -d "$WORKTREES_PATH" ]]; then
+            canonical_worktrees_path=$(cd "$WORKTREES_PATH" && pwd -P)
+        else
+            # If directory doesn't exist yet, resolve parent and append last component
+            canonical_worktrees_path="$WORKTREES_PATH"
+        fi
+
         # Get worktree list and format it nicely
         local worktree_list=$(git -C "$bare_repo_path" worktree list --porcelain)
         local first_worktree=""
         local current_worktree=""
         local current_branch=""
-        
+
         while IFS= read -r line; do
             if [[ $line == worktree* ]]; then
                 current_worktree=${line#worktree }
             elif [[ $line == branch* ]]; then
                 current_branch=${line#branch refs/heads/}
-                
-                # Only show worktrees that are in our worktrees path
-                if [[ $current_worktree == $WORKTREES_PATH* ]]; then
+
+                # Only show worktrees that are in our worktrees path (use canonical path comparison)
+                if [[ $current_worktree == $canonical_worktrees_path* ]] || [[ $current_worktree == $WORKTREES_PATH* ]]; then
                     # Extract just the worktree name (last part of path)
                     local worktree_name=$(basename "$current_worktree")
                     echo "  $worktree_name ($current_branch)"
-                    
+
                     # Remember first worktree for cd
                     if [[ -z $first_worktree ]]; then
                         first_worktree=$current_worktree
@@ -340,119 +354,11 @@ _define_git_worktree_functions() {
                 fi
             fi
         done <<< "$worktree_list"
-        
+
         # Silently cd to first worktree if found
         if [[ -n $first_worktree ]]; then
             echo "WORKTREE_CD_TARGET:$first_worktree"
         fi
-    }
-
-    # Function to create symlink to dependency worktree
-    link_dependency() {
-        local repo_shorthand=$1
-
-        if [[ -z $repo_shorthand ]]; then
-            echo "❌ Error: Repository shorthand is required"
-            echo "Usage: link-dep <repo>"
-            echo "Available repos: ${(k)REPO_MAPPINGS[@]}"
-            return 1
-        fi
-
-        # Check if current directory contains 'deps' - abort if so
-        local current_dir=$(basename "$(pwd)")
-        if [[ $current_dir == *"deps"* ]]; then
-            echo "❌ Error: Cannot create dependencies from a deps worktree to avoid cycles"
-            return 1
-        fi
-
-        local repo_name=$(resolve_repo_name $repo_shorthand)
-        if [[ $? -ne 0 ]]; then
-            return 1
-        fi
-
-        local deps_worktree_path="$WORKTREES_PATH/$repo_name-deps"
-        local main_worktree_path="$WORKTREES_PATH/$repo_name-main"
-        local target_worktree_path=""
-        local symdeps_dir=".dev_workspace/symdeps"
-        local symlink_name="$symdeps_dir/$repo_name"
-
-        # Check if deps worktree exists first, fallback to main
-        if [[ -d $deps_worktree_path ]]; then
-            target_worktree_path="$deps_worktree_path"
-            echo "🔗 Using deps worktree: $deps_worktree_path"
-        elif [[ -d $main_worktree_path ]]; then
-            target_worktree_path="$main_worktree_path"
-            echo "⚠️  Warning: deps worktree not found at $deps_worktree_path"
-            echo "📝 It's recommended to create one with: wt-add $repo_shorthand deps"
-            echo "🔄 Falling back to main worktree: $main_worktree_path"
-        else
-            echo "❌ Error: Neither deps nor main worktree found"
-            echo "📁 Expected deps: $deps_worktree_path"
-            echo "📁 Expected main: $main_worktree_path"
-            echo "Please create one with: wt-add $repo_shorthand deps (recommended) or wt-add $repo_shorthand main"
-            return 1
-        fi
-
-        local destination_symdeps="$target_worktree_path/.dev_workspace/symdeps"
-
-        # Check for potential cyclic dependencies
-        if [[ -d $destination_symdeps && -n "$(ls -A $destination_symdeps 2>/dev/null)" ]]; then
-            echo "⚠️  Warning: $destination_symdeps is non-empty"
-            echo "We should avoid cyclic dependencies. This could create a cycle."
-            echo -n "Clear the symdeps folder in the destination? (Y/n): "
-            read -r response
-            case $response in
-                [Yy]|"")
-                    echo "🧹 Clearing $destination_symdeps..."
-                    rm -rf "$destination_symdeps"/*
-                    ;;
-                [Nn])
-                    echo "❌ Aborted to avoid potential cyclic dependencies"
-                    return 1
-                    ;;
-                *)
-                    echo "❌ Invalid response. Aborting."
-                    return 1
-                    ;;
-            esac
-        fi
-
-        # Create .dev_workspace/symdeps directory if it doesn't exist
-        if [[ ! -d $symdeps_dir ]]; then
-            mkdir -p "$symdeps_dir"
-        fi
-
-        # Check if symlink already exists
-        if [[ -L $symlink_name ]]; then
-            echo "❌ Error: Symlink $symlink_name already exists"
-            return 1
-        fi
-
-        # Create symlink
-        ln -s "$target_worktree_path" "$symlink_name"
-        
-        if [[ $? -eq 0 ]]; then
-            echo "🔗 Created symlink: $symlink_name -> $target_worktree_path"
-        else
-            echo "❌ Failed to create symlink"
-            return 1
-        fi
-    }
-
-    # Function to remove all symlinks in .dev_workspace/symdeps
-    remove_dependencies() {
-        local symdeps_dir=".dev_workspace/symdeps"
-
-        if [[ ! -d $symdeps_dir ]]; then
-            echo "ℹ️  No $symdeps_dir directory found"
-            return 0
-        fi
-
-        echo "🧹 Removing all contents in $symdeps_dir..."
-
-        rm -rf "$symdeps_dir"/*
-        
-        echo "✅ Cleanup complete"
     }
 
     # Function to switch to a worktree
@@ -510,6 +416,14 @@ _define_git_worktree_functions() {
 
         echo "🔍 Searching for worktrees matching '$search_string' in $repo_name..."
 
+        # Resolve WORKTREES_PATH to canonical path for comparison
+        local canonical_worktrees_path
+        if [[ -d "$WORKTREES_PATH" ]]; then
+            canonical_worktrees_path=$(cd "$WORKTREES_PATH" && pwd -P)
+        else
+            canonical_worktrees_path="$WORKTREES_PATH"
+        fi
+
         # Get worktree list and find matches
         local worktree_list=$(git -C "$bare_repo_path" worktree list --porcelain)
         local matching_worktree=""
@@ -522,10 +436,12 @@ _define_git_worktree_functions() {
                 current_worktree=${line#worktree }
             elif [[ $line == branch* ]]; then
                 current_branch=${line#branch refs/heads/}
-                # Check if branch contains the search string (case insensitive)
-                if [[ ${current_branch:l} == *${search_string:l}* ]]; then
-                    matching_worktree=$current_worktree
-                    break
+                # Only consider worktrees in our WORKTREES_PATH and check if branch matches
+                if [[ $current_worktree == $canonical_worktrees_path* ]] || [[ $current_worktree == $WORKTREES_PATH* ]]; then
+                    if [[ ${current_branch:l} == *${search_string:l}* ]]; then
+                        matching_worktree=$current_worktree
+                        break
+                    fi
                 fi
             fi
         done <<< "$worktree_list"
@@ -596,16 +512,24 @@ _define_git_worktree_functions() {
 
         echo "🔍 Looking for worktree '$worktree_name' in $repo_name..."
 
+        # Resolve WORKTREES_PATH to canonical path for comparison
+        local canonical_worktrees_path
+        if [[ -d "$WORKTREES_PATH" ]]; then
+            canonical_worktrees_path=$(cd "$WORKTREES_PATH" && pwd -P)
+        else
+            canonical_worktrees_path="$WORKTREES_PATH"
+        fi
+
         # Find the exact worktree match
         local worktree_list=$(git -C "$bare_repo_path" worktree list --porcelain)
         local target_worktree=""
         local current_worktree=""
-        
+
         while IFS= read -r line; do
             if [[ $line == worktree* ]]; then
                 current_worktree=${line#worktree }
-                # Check if this worktree is in our worktrees path and matches exactly
-                if [[ $current_worktree == $WORKTREES_PATH* ]]; then
+                # Check if this worktree is in our worktrees path and matches exactly (canonical path comparison)
+                if [[ $current_worktree == $canonical_worktrees_path* ]] || [[ $current_worktree == $WORKTREES_PATH* ]]; then
                     local worktree_basename=$(basename "$current_worktree")
                     if [[ $worktree_basename == $worktree_name ]]; then
                         target_worktree=$current_worktree
@@ -617,7 +541,7 @@ _define_git_worktree_functions() {
 
         if [[ -n $target_worktree ]]; then
             echo "🗑️  Found worktree: $target_worktree"
-            
+
             # Check if we're currently in the worktree we want to remove
             local current_dir=$(pwd)
             if [[ $current_dir == $target_worktree* ]]; then
@@ -627,10 +551,10 @@ _define_git_worktree_functions() {
                 echo "💡 Please navigate outside this worktree first, then try again"
                 return 1
             fi
-            
+
             echo "🗑️  Removing worktree: $target_worktree"
             git -C "$bare_repo_path" worktree remove "$target_worktree"
-            
+
             if [[ $? -eq 0 ]]; then
                 echo "✅ Worktree removed successfully"
             else
@@ -640,12 +564,12 @@ _define_git_worktree_functions() {
         else
             echo "❌ No worktree found with name '$worktree_name'"
             echo "📋 Available worktrees for $repo_name:"
-            
+
             # Show available worktrees
             while IFS= read -r line; do
                 if [[ $line == worktree* ]]; then
                     current_worktree=${line#worktree }
-                    if [[ $current_worktree == $WORKTREES_PATH* ]]; then
+                    if [[ $current_worktree == $canonical_worktrees_path* ]] || [[ $current_worktree == $WORKTREES_PATH* ]]; then
                         local worktree_basename=$(basename "$current_worktree")
                         echo "  $worktree_basename"
                     fi
@@ -788,8 +712,6 @@ _define_git_worktree_functions() {
         echo "  wt-rm [<repo>] <worktree-name> - Remove a specific worktree"
         echo "  wt-template-save [<repo>]      - Save current template files"
         echo "  wt-template-load [<repo>]      - Load template files"
-        echo "  deps-link <repo>               - Create symlink to dependency worktree"
-        echo "  deps-rm                        - Remove all dependency symlinks"
         echo ""
         echo "Repository shorthands (optional for most commands if running from repo directory):"
         for key value in ${(kv)REPO_MAPPINGS[@]}; do
@@ -807,12 +729,14 @@ _define_git_worktree_functions() {
         echo "  wt-rm old-feature              # Remove 'old-feature' worktree from current repo"
         echo "  wt-template-save               # Save current worktree's template files"
         echo "  wt-template-load webapp        # Load template files from webapp template"
-        echo "  deps-link lib                  # Create dependency symlink to library"
-        echo "  deps-rm                        # Remove all dependency symlinks"
         echo ""
         echo "Configuration:"
         echo "  Git Username: $GIT_USERNAME"
-        echo "  Branch Prefix: $BRANCH_PREFIX"
+        if [[ -n $BRANCH_PREFIX ]]; then
+            echo "  Branch Prefix: $BRANCH_PREFIX (branches created as: $BRANCH_PREFIX/branch-name)"
+        else
+            echo "  Branch Prefix: (none - branches created without prefix)"
+        fi
         echo "  Bare repos: $BARE_REPOS_PATH"
         echo "  Worktrees: $WORKTREES_PATH"
         echo "  Templates: $WORKTREE_TEMPLATES_PATH"
@@ -840,12 +764,6 @@ git_worktree() {
             ;;
         "template-load")
             template_load $2
-            ;;
-        "link-dep")
-            link_dependency $2
-            ;;
-        "rm-deps")
-            remove_dependencies
             ;;
         "help"|"-h"|"--help")
             show_worktree_help
@@ -881,5 +799,3 @@ alias wt-switch='_exec_worktree_command switch'
 alias wt-rm='_exec_worktree_command rm'
 alias wt-template-save='git_worktree template-save'
 alias wt-template-load='git_worktree template-load'
-alias deps-link='git_worktree link-dep'
-alias deps-rm='git_worktree rm-deps'

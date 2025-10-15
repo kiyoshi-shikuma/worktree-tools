@@ -65,10 +65,55 @@ _load_ci_helper_impl() {
 
 # Define all the implementation functions
 _define_ci_helper_functions() {
+    # Helper to resolve repo identifier (shorthand or full name) to shorthand
+    # This allows configs to use shorthand consistently
+    resolve_to_shorthand() {
+        local identifier=$1
+
+        # First check if it's already a shorthand
+        if [[ -n ${REPO_MAPPINGS[$identifier]} ]]; then
+            echo "$identifier"
+            return 0
+        fi
+
+        # Check if it's a full name, find the shorthand
+        for shorthand full_name in ${(kv)REPO_MAPPINGS[@]}; do
+            if [[ "$full_name" == "$identifier" ]]; then
+                echo "$shorthand"
+                return 0
+            fi
+        done
+
+        # Not found in mappings, return as-is for backward compatibility
+        echo "$identifier"
+    }
+
+    # Get config value supporting both shorthand and full name keys
+    get_repo_config() {
+        local repo=$1
+        local shorthand=$(resolve_to_shorthand "$repo")
+
+        # Try shorthand first, then full name for backward compatibility
+        local config="${REPO_CONFIGS[$shorthand]:-${REPO_CONFIGS[$repo]:-}}"
+        echo "$config"
+    }
+
     # Function to get modules for a repository
     get_repo_modules() {
         local repo=$1
-        echo "${REPO_MODULES[$repo]:-}"
+        local shorthand=$(resolve_to_shorthand "$repo")
+
+        # Try shorthand first, then full name for backward compatibility
+        echo "${REPO_MODULES[$shorthand]:-${REPO_MODULES[$repo]:-}}"
+    }
+
+    # Get IDE config supporting both shorthand and full name keys
+    get_repo_ide_config() {
+        local repo=$1
+        local shorthand=$(resolve_to_shorthand "$repo")
+
+        # Try shorthand first, then full name for backward compatibility
+        echo "${REPO_IDE_CONFIGS[$shorthand]:-${REPO_IDE_CONFIGS[$repo]:-}}"
     }
 
     # Function to find git worktree root
@@ -124,8 +169,9 @@ _define_ci_helper_functions() {
             if [[ -n $origin_url ]]; then
                 # Extract repo name from URL
                 local repo_from_url=$(basename "$origin_url" .git)
-                # Check if this repo is configured
-                if [[ -n ${REPO_CONFIGS[$repo_from_url]} ]]; then
+
+                # Check if this repo is configured (try both shorthand and full name)
+                if [[ -n $(get_repo_config "$repo_from_url") ]]; then
                     echo "$repo_from_url"
                     return
                 fi
@@ -136,13 +182,24 @@ _define_ci_helper_functions() {
         local current_dir=$(pwd)
         local repo_name=""
 
-        # Check each configured repo against current path
+        # Check each configured repo (try both shorthand and full name)
+        # First check REPO_CONFIGS keys
         for repo in ${(k)REPO_CONFIGS[@]}; do
             if [[ $current_dir == *"$repo"* ]]; then
                 repo_name="$repo"
                 break
             fi
         done
+
+        # If not found, check REPO_MAPPINGS full names
+        if [[ -z $repo_name ]]; then
+            for shorthand full_name in ${(kv)REPO_MAPPINGS[@]}; do
+                if [[ $current_dir == *"$full_name"* ]]; then
+                    repo_name="$shorthand"
+                    break
+                fi
+            done
+        fi
 
         echo $repo_name
     }
@@ -169,7 +226,7 @@ _define_ci_helper_functions() {
         local repo=$1
         local command_type=$2  # build, test, or lint
         
-        local config="${REPO_CONFIGS[$repo]}"
+        local config="$(get_repo_config "$repo")"
         case $command_type in
             "build")
                 echo "${config%%|*}"
@@ -328,7 +385,7 @@ _define_ci_helper_functions() {
         local repo=$1
         local field=$2  # ide_type, workspace_path, or fallback_command
         
-        local config="${REPO_IDE_CONFIGS[$repo]}"
+        local config="$(get_repo_ide_config "$repo")"
         case $field in
             "ide_type")
                 echo "${config%%|*}"
@@ -343,6 +400,129 @@ _define_ci_helper_functions() {
         esac
     }
 
+    # Function to detect IDE type and workspace for a repository
+    # Returns: "ide_type|workspace_path|status_code"
+    # This is pure logic - no side effects, fully testable
+    detect_ide_info() {
+        local git_root=$1
+        local repo=$2
+
+        # Check if repository has specific IDE configuration
+        local ide_type=$(get_ide_config $repo "ide_type")
+        local workspace_path=$(get_ide_config $repo "workspace_path")
+
+        if [[ -n $ide_type ]]; then
+            # Use configured IDE type
+            case $ide_type in
+                "android-studio")
+                    echo "android-studio||0"
+                    return 0
+                    ;;
+                "xcode-workspace")
+                    local full_workspace_path="$git_root/$workspace_path"
+                    if [[ -d "$full_workspace_path" ]]; then
+                        echo "xcode-workspace|$full_workspace_path|0"
+                        return 0
+                    else
+                        echo "xcode-workspace|$full_workspace_path|1"
+                        return 1
+                    fi
+                    ;;
+                "xcode-package")
+                    local full_workspace_path="$git_root/$workspace_path"
+                    if [[ -d "$full_workspace_path" ]]; then
+                        echo "xcode-package|$full_workspace_path|0"
+                        return 0
+                    else
+                        echo "xcode-package|$full_workspace_path|1"
+                        return 1
+                    fi
+                    ;;
+                "vscode")
+                    echo "vscode|$git_root|0"
+                    return 0
+                    ;;
+                *)
+                    echo "unknown|$ide_type|1"
+                    return 1
+                    ;;
+            esac
+        else
+            # Fallback: Generic heuristics for IDE selection
+            if [[ -f "$git_root/gradlew" ]] || [[ -f "$git_root/build.gradle" ]]; then
+                echo "android-studio|$git_root|0"
+                return 0
+            elif [[ -f "$git_root/Package.swift" ]]; then
+                local workspace_path="$git_root/.swiftpm/xcode/package.xcworkspace"
+                if [[ -d "$workspace_path" ]]; then
+                    echo "xcode-package|$workspace_path|0"
+                    return 0
+                else
+                    echo "xcode-package|$git_root/Package.swift|0"
+                    return 0
+                fi
+            else
+                # Check for .xcworkspace files
+                local workspace_files=("$git_root"/*.xcworkspace(N))
+                if [[ ${#workspace_files[@]} -gt 0 ]]; then
+                    echo "xcode-workspace|${workspace_files[1]}|0"
+                    return 0
+                fi
+
+                # Check for .xcodeproj files
+                local project_files=("$git_root"/*.xcodeproj(N))
+                if [[ ${#project_files[@]} -gt 0 ]]; then
+                    echo "xcode-project|${project_files[1]}|0"
+                    return 0
+                fi
+
+                # Default fallback
+                echo "default|$git_root|0"
+                return 0
+            fi
+        fi
+    }
+
+    # Function to execute IDE launch command
+    # This function has side effects - calls external commands
+    launch_ide() {
+        local ide_type=$1
+        local target_path=$2
+
+        case $ide_type in
+            "android-studio")
+                if command -v studio &> /dev/null; then
+                    studio "$target_path" &
+                elif [[ -d "/Applications/Android Studio.app" ]]; then
+                    open -a "Android Studio" "$target_path"
+                else
+                    return 1
+                fi
+                ;;
+            "xcode-workspace"|"xcode-package"|"xcode-project")
+                open "$target_path"
+                ;;
+            "vscode")
+                if command -v code &> /dev/null; then
+                    code "$target_path"
+                else
+                    open "$target_path"
+                fi
+                ;;
+            "default")
+                if command -v code &> /dev/null; then
+                    code "$target_path"
+                else
+                    open "$target_path"
+                fi
+                ;;
+            *)
+                return 1
+                ;;
+        esac
+        return 0
+    }
+
     # Function to open IDE for current repository
     open_ide() {
         local repo=$(check_repo)
@@ -352,10 +532,10 @@ _define_ci_helper_functions() {
         fi
 
         echo "✅ Detected repository: $repo"
-        
+
         local git_root=$(find_git_root)
         echo "🔍 Git root result: '$git_root'"
-        
+
         if [[ -z $git_root ]]; then
             echo "❌ Error: Not in a git repository"
             return 1
@@ -363,136 +543,63 @@ _define_ci_helper_functions() {
 
         echo "💻 Opening IDE for $repo..."
 
-        # Check if repository has specific IDE configuration
-        local ide_type=$(get_ide_config $repo "ide_type")
-        local workspace_path=$(get_ide_config $repo "workspace_path")
-        local fallback_command=$(get_ide_config $repo "fallback_command")
+        # Detect IDE info (testable pure function)
+        local ide_info=$(detect_ide_info "$git_root" "$repo")
+        local ide_type="${ide_info%%|*}"
+        local temp="${ide_info#*|}"
+        local target_path="${temp%%|*}"
+        local status_code="${temp##*|}"
 
-        if [[ -n $ide_type ]]; then
-            # Use configured IDE type
+        if [[ $status_code -ne 0 ]]; then
             case $ide_type in
-                "android-studio")
-                    echo "📱 Opening Android Studio..."
-                    if command -v studio &> /dev/null; then
-                        studio "$git_root" &
-                    elif [[ -d "/Applications/Android Studio.app" ]]; then
-                        open -a "Android Studio" "$git_root"
-                    else
-                        echo "❌ Android Studio not found"
-                        return 1
-                    fi
-                    echo "✅ Android Studio opening in $git_root"
-                    ;;
-                "xcode-workspace")
-                    echo "🍎 Opening Xcode workspace..."
-                    local full_workspace_path="$git_root/$workspace_path"
-                    if [[ -d "$full_workspace_path" ]]; then
-                        open "$full_workspace_path"
-                        echo "✅ Xcode opening $full_workspace_path"
-                    else
-                        echo "❌ $workspace_path not found at $full_workspace_path"
-                        if [[ -n $fallback_command ]]; then
-                            echo "💡 Try running '$fallback_command'"
-                        fi
-                        return 1
+                "xcode-workspace"|"xcode-package")
+                    local workspace_path=$(get_ide_config $repo "workspace_path")
+                    echo "❌ $workspace_path not found at $target_path"
+                    local fallback_command=$(get_ide_config $repo "fallback_command")
+                    if [[ -n $fallback_command ]]; then
+                        echo "💡 Try running '$fallback_command'"
                     fi
                     ;;
-                "xcode-package")
-                    echo "🍎 Opening Xcode for Swift Package..."
-                    local full_workspace_path="$git_root/$workspace_path"
-                    if [[ -d "$full_workspace_path" ]]; then
-                        open "$full_workspace_path"
-                        echo "✅ Xcode opening $full_workspace_path"
-                    else
-                        echo "❌ $workspace_path not found at $full_workspace_path"
-                        if [[ -n $fallback_command ]]; then
-                            echo "💡 Try running '$fallback_command' or opening Package.swift in Xcode first"
-                        fi
-                        return 1
-                    fi
-                    ;;
-                "vscode")
-                    echo "🌐 Opening VS Code..."
-                    if command -v code &> /dev/null; then
-                        code "$git_root"
-                        echo "✅ VS Code opening $git_root"
-                    else
-                        echo "🤔 VS Code not found, opening in default editor..."
-                        open "$git_root"
-                    fi
-                    ;;
-                *)
-                    echo "❌ Unknown IDE type: $ide_type"
-                    return 1
+                "unknown")
+                    echo "❌ Unknown IDE type: $target_path"
                     ;;
             esac
-        else
-            # Fallback: Generic heuristics for IDE selection
-            echo "🔍 No IDE configuration found, using heuristics..."
-            if [[ -f "$git_root/gradlew" ]] || [[ -f "$git_root/build.gradle" ]]; then
-                # Android/Gradle project
-                echo "📱 Opening Android Studio..."
-                if command -v studio &> /dev/null; then
-                    studio "$git_root" &
-                elif [[ -d "/Applications/Android Studio.app" ]]; then
-                    open -a "Android Studio" "$git_root"
-                else
-                    echo "❌ Android Studio not found"
-                    return 1
-                fi
-            elif [[ -f "$git_root/Package.swift" ]]; then
-                # Swift Package
-                echo "🍎 Opening Xcode for Swift Package..."
-                local workspace_path="$git_root/.swiftpm/xcode/package.xcworkspace"
-                if [[ -d "$workspace_path" ]]; then
-                    open "$workspace_path"
-                else
-                    echo "💡 Opening Package.swift in Xcode"
-                    open "$git_root/Package.swift"
-                fi
-            else
-                # Check for .xcworkspace files
-                local workspace_files=("$git_root"/*.xcworkspace(N))
-                if [[ ${#workspace_files[@]} -gt 0 ]]; then
-                    echo "🍎 Opening Xcode workspace..."
-                    if [[ ${#workspace_files[@]} -eq 1 ]]; then
-                        open "${workspace_files[1]}"
-                    else
-                        echo "⚠️  Multiple workspace files found, opening first one:"
-                        for ws in "${workspace_files[@]}"; do
-                            echo "  - $(basename "$ws")"
-                        done
-                        open "${workspace_files[1]}"
-                    fi
-                elif [[ -n $(echo "$git_root"/*.xcodeproj(N)) ]]; then
-                    # Check for .xcodeproj files
-                    local project_files=("$git_root"/*.xcodeproj(N))
-                    if [[ ${#project_files[@]} -gt 0 ]]; then
-                        echo "🍎 Opening Xcode project..."
-                        if [[ ${#project_files[@]} -eq 1 ]]; then
-                            open "${project_files[1]}"
-                        else
-                            echo "⚠️  Multiple project files found, opening first one:"
-                            for proj in "${project_files[@]}"; do
-                                echo "  - $(basename "$proj")"
-                            done
-                            open "${project_files[1]}"
-                        fi
-                    fi
-                fi
-            fi
+            return 1
+        fi
 
-            # Fallback to default editor if no Xcode files found
-            if [[ ! -f "$git_root/gradlew" ]] && [[ ! -f "$git_root/build.gradle" ]] && \
-               [[ ! -f "$git_root/Package.swift" ]] && [[ ${#workspace_files[@]} -eq 0 ]] && \
-               [[ -z "${project_files[@]}" ]]; then
+        # Map IDE type to user-friendly messages
+        case $ide_type in
+            "android-studio")
+                echo "📱 Opening Android Studio..."
+                ;;
+            "xcode-workspace"|"xcode-project")
+                echo "🍎 Opening Xcode workspace..."
+                ;;
+            "xcode-package")
+                echo "🍎 Opening Xcode for Swift Package..."
+                ;;
+            "vscode")
+                echo "🌐 Opening VS Code..."
+                ;;
+            "default")
                 echo "🤔 Unknown project type, opening in default editor..."
-                if command -v code &> /dev/null; then
-                    code "$git_root"
-                else
-                    open "$git_root"
-                fi
-            fi
+                ;;
+        esac
+
+        # Launch IDE (side effect function)
+        if launch_ide "$ide_type" "$target_path"; then
+            echo "✅ IDE opening: $target_path"
+            return 0
+        else
+            case $ide_type in
+                "android-studio")
+                    echo "❌ Android Studio not found"
+                    ;;
+                *)
+                    echo "❌ Failed to open IDE"
+                    ;;
+            esac
+            return 1
         fi
     }
 

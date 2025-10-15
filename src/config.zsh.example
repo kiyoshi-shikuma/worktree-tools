@@ -1,0 +1,104 @@
+#!/usr/bin/env zsh
+# Worktree Tools Configuration
+# Copy to: ~/.config/worktree-tools/config.zsh
+
+# Config version (for migrations)
+CONFIG_VERSION=1
+
+# =============================================================================
+# REQUIRED: Update these for your setup
+# =============================================================================
+
+GIT_USERNAME="${USER}"
+
+# Branch prefix (set to "" for no prefix)
+# "john" creates: john/my-feature
+# "" creates: my-feature
+BRANCH_PREFIX="${USER}"
+
+# Where you ran setup_repos.sh (contains .repos/ and worktrees/)
+# Examples: "$HOME/work/mobile", "$HOME/dev", "$HOME/projects"
+BASE_DEV_PATH="$HOME/dev"
+
+# =============================================================================
+# Repository shortcuts
+# =============================================================================
+
+[[ -z ${(t)REPO_MAPPINGS} ]] && declare -gA REPO_MAPPINGS
+
+# Add your repos here:
+# REPO_MAPPINGS[shorthand]="Full-Repo-Name"
+#
+# Examples:
+# REPO_MAPPINGS[acmd]="Company-Android"
+# REPO_MAPPINGS[alib]="Company-Android-Library"
+# REPO_MAPPINGS[icmd]="Company-iOS"
+# REPO_MAPPINGS[ilib]="Company-iOS-Library"
+
+# =============================================================================
+# Optional: IDE configuration (uncomment to enable 'ide' command)
+# =============================================================================
+
+# Opens the configured IDE when you run 'ide' from within a repo
+# Format: "ide_type|workspace_path|fallback_command"
+#
+# NOTE: You can use either shorthand OR full repo name as keys.
+#       Shorthand is recommended, but both work for backward compatibility.
+
+[[ -z ${(t)REPO_IDE_CONFIGS} ]] && declare -gA REPO_IDE_CONFIGS
+
+# REPO_IDE_CONFIGS[acmd]="android-studio||"
+# REPO_IDE_CONFIGS[alib]="android-studio||"
+# REPO_IDE_CONFIGS[icmd]="xcode-workspace|Company-iOS.xcworkspace|"
+# REPO_IDE_CONFIGS[ilib]="xcode-package|.swiftpm/xcode/package.xcworkspace|swift package generate-xcodeproj"
+
+# =============================================================================
+# Optional: CI commands (uncomment to enable ci/test/lint shortcuts)
+# =============================================================================
+
+# Enables running 'ci', 'test', or 'lint' from within a repo
+# Format: "build_cmd|test_cmd|lint_cmd"
+#
+# NOTE: You can use either shorthand OR full repo name as keys.
+#       Shorthand is recommended, but both work for backward compatibility.
+
+[[ -z ${(t)REPO_CONFIGS} ]] && declare -gA REPO_CONFIGS
+
+# Android example:
+# REPO_CONFIGS[acmd]="./gradlew --quiet assembleDebug|./gradlew --quiet testDebugUnitTest|./gradlew --quiet lintDebug detekt"
+
+# iOS example:
+# REPO_CONFIGS[icmd]="bundle exec fastlane build|bundle exec fastlane unit_tests|swiftlint --strict"
+
+# Web example:
+# REPO_CONFIGS[web]="npm run build|npm test|npm run lint"
+
+# =============================================================================
+# Optional: Modular builds (uncomment to enable ci_modules/lint_modules)
+# =============================================================================
+
+# For monorepos with multiple modules - lets you select which ones to build/lint
+# Format: space-separated list of modules
+#
+# NOTE: You can use either shorthand OR full repo name as keys.
+#       Shorthand is recommended, but both work for backward compatibility.
+# Currently only supported for Gradle/Android projects
+
+[[ -z ${(t)REPO_MODULES} ]] && declare -gA REPO_MODULES
+
+# Android modules:
+# REPO_MODULES[acmd]="app-core app-feature-auth app-feature-profile"
+
+# iOS modules:
+# REPO_MODULES[icmd]="CoreModule AuthModule ProfileModule"
+
+# Web packages:
+# REPO_MODULES[web]="packages/ui packages/api packages/utils"
+
+# =============================================================================
+# Auto-computed paths (don't change unless you have custom structure)
+# =============================================================================
+
+BARE_REPOS_PATH="$BASE_DEV_PATH/.repos"
+WORKTREES_PATH="$BASE_DEV_PATH/worktrees"
+WORKTREE_TEMPLATES_PATH="$BASE_DEV_PATH/worktree_templates"
