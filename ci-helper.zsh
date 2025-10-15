@@ -450,15 +450,42 @@ _define_ci_helper_functions() {
                     echo "💡 Opening Package.swift in Xcode"
                     open "$git_root/Package.swift"
                 fi
-            elif [[ -f "$git_root"/*.xcworkspace ]]; then
-                # Xcode workspace
-                echo "🍎 Opening Xcode workspace..."
-                open "$git_root"/*.xcworkspace
-            elif [[ -f "$git_root"/*.xcodeproj ]]; then
-                # Xcode project
-                echo "🍎 Opening Xcode project..."
-                open "$git_root"/*.xcodeproj
             else
+                # Check for .xcworkspace files
+                local workspace_files=("$git_root"/*.xcworkspace(N))
+                if [[ ${#workspace_files[@]} -gt 0 ]]; then
+                    echo "🍎 Opening Xcode workspace..."
+                    if [[ ${#workspace_files[@]} -eq 1 ]]; then
+                        open "${workspace_files[1]}"
+                    else
+                        echo "⚠️  Multiple workspace files found, opening first one:"
+                        for ws in "${workspace_files[@]}"; do
+                            echo "  - $(basename "$ws")"
+                        done
+                        open "${workspace_files[1]}"
+                    fi
+                elif [[ -n $(echo "$git_root"/*.xcodeproj(N)) ]]; then
+                    # Check for .xcodeproj files
+                    local project_files=("$git_root"/*.xcodeproj(N))
+                    if [[ ${#project_files[@]} -gt 0 ]]; then
+                        echo "🍎 Opening Xcode project..."
+                        if [[ ${#project_files[@]} -eq 1 ]]; then
+                            open "${project_files[1]}"
+                        else
+                            echo "⚠️  Multiple project files found, opening first one:"
+                            for proj in "${project_files[@]}"; do
+                                echo "  - $(basename "$proj")"
+                            done
+                            open "${project_files[1]}"
+                        fi
+                    fi
+                fi
+            fi
+
+            # Fallback to default editor if no Xcode files found
+            if [[ ! -f "$git_root/gradlew" ]] && [[ ! -f "$git_root/build.gradle" ]] && \
+               [[ ! -f "$git_root/Package.swift" ]] && [[ ${#workspace_files[@]} -eq 0 ]] && \
+               [[ -z "${project_files[@]}" ]]; then
                 echo "🤔 Unknown project type, opening in default editor..."
                 if command -v code &> /dev/null; then
                     code "$git_root"
