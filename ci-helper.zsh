@@ -238,6 +238,10 @@ _define_ci_helper_functions() {
         # Check if this is a gradle-based project
         if [[ $(get_repo_command $repo "build") == *"gradlew"* ]]; then
             local assemble_cmd=$(build_gradle_command $repo "assembleDebug")
+            if [[ $? -ne 0 ]]; then
+                echo "❌ Failed to build gradle command for modules"
+                return 1
+            fi
             local test_cmd=$(build_gradle_command $repo "testDebugUnitTest")
             local lint_cmd=$(build_gradle_command $repo "lintDebug" "detekt")
 
@@ -304,6 +308,10 @@ _define_ci_helper_functions() {
         # Check if this is a gradle-based project
         if [[ $(get_repo_command $repo "build") == *"gradlew"* ]]; then
             local lint_cmd=$(build_gradle_command $repo "lintDebug" "detekt")
+            if [[ $? -ne 0 ]]; then
+                echo "❌ Failed to build gradle command for modules"
+                return 1
+            fi
             eval "$lint_cmd"
 
             if [[ $? -eq 0 ]]; then
