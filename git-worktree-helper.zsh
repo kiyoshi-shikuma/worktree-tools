@@ -267,8 +267,12 @@ _define_git_worktree_functions() {
         if [[ -n "$(ls -A "$template_dir" 2>/dev/null)" ]]; then
             # Enable dotglob to include hidden files in glob expansion
             setopt local_options dotglob
-            cp -r "$template_dir"/* "$worktree_path/" 2>/dev/null
-            echo "✅ Templates copied successfully"
+            if cp -r "$template_dir"/* "$worktree_path/"; then
+                echo "✅ Templates copied successfully"
+            else
+                echo "⚠️  Warning: Some template files may not have been copied (check permissions)"
+                return 1
+            fi
         else
             echo "ℹ️  Template directory is empty"
         fi
@@ -761,8 +765,12 @@ _define_git_worktree_functions() {
         if [[ -n "$(ls -A "$template_dir" 2>/dev/null)" ]]; then
             # Enable dotglob to include hidden files in glob expansion
             setopt local_options dotglob
-            cp -r "$template_dir"/* "$current_dir/" 2>/dev/null
-            echo "✅ Template files loaded successfully"
+            if cp -r "$template_dir"/* "$current_dir/"; then
+                echo "✅ Template files loaded successfully"
+            else
+                echo "❌ Error: Failed to copy template files (check permissions)"
+                return 1
+            fi
         else
             echo "ℹ️  Template directory is empty"
         fi
