@@ -1,0 +1,9 @@
+###### CodeOwners
+# These owners will be the default owners for everything in
+# the repo. Unless a later match takes precedence,
+* @kiyoshi-shikuma
+
+
+##### Samples
+# @GitHubUser - Individual User
+# /app/src @GitHubUser - Specify owner of specific directory
