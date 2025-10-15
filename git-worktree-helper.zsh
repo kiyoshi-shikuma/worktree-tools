@@ -19,10 +19,10 @@ BARE_REPOS_PATH="$BASE_DEV_PATH/.repos"
 WORKTREES_PATH="$BASE_DEV_PATH/worktrees"
 WORKTREE_TEMPLATES_PATH="$BASE_DEV_PATH/worktree_templates"
 
-declare -A REPO_MAPPINGS
-
 # Default configuration (used as fallback)
 _load_default_worktree_config() {
+    # Initialize array if not already declared
+    [[ -z ${(t)REPO_MAPPINGS} ]] && declare -gA REPO_MAPPINGS
     # Your git username and branch prefix
     GIT_USERNAME="your-username"
     BRANCH_PREFIX="your-username"
@@ -50,8 +50,11 @@ _git_worktree_loaded=false
 
 # Load configuration from external file
 _load_worktree_config() {
+    # Initialize array ONLY if not already declared
+    [[ -z ${(t)REPO_MAPPINGS} ]] && declare -gA REPO_MAPPINGS
+
     local config_file="$HOME/.config/worktree-tools/config.zsh"
-    
+
     if [[ -f "$config_file" ]]; then
         source "$config_file"
     else

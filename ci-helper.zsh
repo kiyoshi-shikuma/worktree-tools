@@ -37,13 +37,13 @@ _ci_helper_loaded=false
 
 # Load configuration from external file
 _load_ci_config() {
-    # Initialize associative arrays
-    declare -gA REPO_CONFIGS
-    declare -gA REPO_MODULES
-    declare -gA REPO_IDE_CONFIGS
-    
+    # Initialize associative arrays ONLY if not already declared
+    [[ -z ${(t)REPO_CONFIGS} ]] && declare -gA REPO_CONFIGS
+    [[ -z ${(t)REPO_MODULES} ]] && declare -gA REPO_MODULES
+    [[ -z ${(t)REPO_IDE_CONFIGS} ]] && declare -gA REPO_IDE_CONFIGS
+
     local config_file="$HOME/.config/worktree-tools/config.zsh"
-    
+
     if [[ -f "$config_file" ]]; then
         source "$config_file"
     else
@@ -93,7 +93,8 @@ _define_ci_helper_functions() {
     # Function to build gradle command for modules
     build_gradle_command() {
         local repo=$1
-        local task=$2
+        shift  # Remove repo from arguments, rest are tasks
+        local tasks=("$@")
         local modules=$(get_repo_modules $repo)
 
         if [[ -z $modules ]]; then
@@ -103,11 +104,13 @@ _define_ci_helper_functions() {
         local command=""
         # Split modules by space and iterate
         for module in ${=modules}; do
-            if [[ -n $command ]]; then
-                command="$command :$module:$task"
-            else
-                command=":$module:$task"
-            fi
+            for task in "${tasks[@]}"; do
+                if [[ -n $command ]]; then
+                    command="$command :$module:$task"
+                else
+                    command=":$module:$task"
+                fi
+            done
         done
 
         echo "./gradlew --quiet $command"
@@ -236,7 +239,7 @@ _define_ci_helper_functions() {
         if [[ $(get_repo_command $repo "build") == *"gradlew"* ]]; then
             local assemble_cmd=$(build_gradle_command $repo "assembleDebug")
             local test_cmd=$(build_gradle_command $repo "testDebugUnitTest")
-            local lint_cmd=$(build_gradle_command $repo "lintDebug")
+            local lint_cmd=$(build_gradle_command $repo "lintDebug" "detekt")
 
             eval "$assemble_cmd && $test_cmd && $lint_cmd"
             if [[ $? -eq 0 ]]; then
@@ -300,9 +303,9 @@ _define_ci_helper_functions() {
 
         # Check if this is a gradle-based project
         if [[ $(get_repo_command $repo "build") == *"gradlew"* ]]; then
-            local lint_cmd=$(build_gradle_command $repo "lintDebug")
+            local lint_cmd=$(build_gradle_command $repo "lintDebug" "detekt")
             eval "$lint_cmd"
-            
+
             if [[ $? -eq 0 ]]; then
                 echo -e "\033[32m✅ SUCCESS\033[0m"
             fi
