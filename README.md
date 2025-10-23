@@ -407,8 +407,7 @@ Your worktrees in `worktrees/` are the "normal" working directories where you ac
 
 This is an ongoing project. Found a bug or want a feature?
 
-- **Issues**: File at `[repository-url]/issues`
-- **Contact**: [your-email] or ping the author
+- **Issues**: File at `[https://github.com/kiyoshi-shikuma/worktree-tools/issues]`
 
 Contributions welcome!
 
