@@ -110,26 +110,42 @@ Keep 2-3 long-lived worktrees per repository for different types of work. Common
 
 These are just examples - use whatever workflow fits your needs!
 
-### Fast Switching with Zshmarks
+### Fast Switching with Bookmarks
 
-For fastest navigation, use [zshmarks](https://github.com/jocelynmallon/zshmarks):
+For fastest navigation, use directory bookmarks:
+- **Zsh users**: [bashmarks](https://github.com/huyng/bashmarks) works with zsh, or use [zshmarks](https://github.com/jocelynmallon/zshmarks) (a zsh-native port)
+- **Bash users**: [bashmarks](https://github.com/huyng/bashmarks)
 
+**Installing bashmarks for zsh:**
 ```bash
-# Bookmark your worktrees once (add shorthand aliases to ~/.zshrc)
-alias g='jump'
-alias s='bookmark'
-alias l='showmarks'
+# Clone and install
+git clone https://github.com/huyng/bashmarks.git
+cd bashmarks
+make install
 
+# Add to ~/.zshrc (instead of ~/.bashrc)
+echo 'source ~/.local/bin/bashmarks.sh' >> ~/.zshrc
+source ~/.zshrc
+```
+
+**Using bashmarks (default commands):**
+```bash
+# Bookmark your worktrees once
 cd ~/dev/worktrees/Company-Android-working
-s acmd
+s acmd          # Save bookmark
 
 cd ~/dev/worktrees/Company-iOS-working
 s icmd
 
 # Jump instantly from anywhere
-g acmd
-g icmd
+g acmd          # Go to bookmark
+l               # List all bookmarks
+d acmd          # Delete bookmark (if needed)
 ```
+
+Default commands: `s` (save), `g` (go), `l` (list), `d` (delete), `p` (print path). You can customize these by editing `~/.local/bin/bashmarks.sh`.
+
+**Note**: If using zshmarks instead, see [their README](https://github.com/jocelynmallon/zshmarks#commands) for aliases to get similar brevity (`bookmark`, `jump`, `showmarks`, `deletemark` by default).
 
 **Alternative**: Use `wt-switch` for fuzzy search:
 ```bash
