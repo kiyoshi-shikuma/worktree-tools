@@ -176,13 +176,13 @@ REPO_MODULES[web]="packages/ui packages/api"
         """Test that normalization preserves user values."""
         user_config = '''#!/usr/bin/env zsh
 CONFIG_VERSION=1
-GIT_USERNAME=kiyoshi-shikuma
-BRANCH_PREFIX=kiyoshi
-BASE_DEV_PATH=/Users/kiyoshi.shikuma/verkada/mobile
+GIT_USERNAME=testuser
+BRANCH_PREFIX=testuser
+BASE_DEV_PATH=/home/testuser/projects/mobile
 
 [[ -z ${(t)REPO_MAPPINGS} ]] && declare -gA REPO_MAPPINGS
-REPO_MAPPINGS[icmd]="Verkada-iOS"
-REPO_MAPPINGS[acmd]="Verkada-Android"
+REPO_MAPPINGS[icmd]="MyOrg-iOS"
+REPO_MAPPINGS[acmd]="MyOrg-Android"
 
 REPO_IDE_CONFIGS[acmd]="android-studio||"
 
@@ -194,13 +194,13 @@ REPO_MODULES[acmd]="app-core app-auth"
         normalized = normalizer.normalize()
 
         # Check simple variables
-        self.assertIn('GIT_USERNAME=kiyoshi-shikuma', normalized)
-        self.assertIn('BRANCH_PREFIX=kiyoshi', normalized)
-        self.assertIn('BASE_DEV_PATH=/Users/kiyoshi.shikuma/verkada/mobile', normalized)
+        self.assertIn('GIT_USERNAME=testuser', normalized)
+        self.assertIn('BRANCH_PREFIX=testuser', normalized)
+        self.assertIn('BASE_DEV_PATH=/home/testuser/projects/mobile', normalized)
 
         # Check REPO_MAPPINGS
-        self.assertIn('REPO_MAPPINGS[icmd]="Verkada-iOS"', normalized)
-        self.assertIn('REPO_MAPPINGS[acmd]="Verkada-Android"', normalized)
+        self.assertIn('REPO_MAPPINGS[icmd]="MyOrg-iOS"', normalized)
+        self.assertIn('REPO_MAPPINGS[acmd]="MyOrg-Android"', normalized)
         # Should NOT contain example mappings as uncommented lines
         uncommented_lines = [l for l in normalized.split('\n') if l.startswith('REPO_MAPPINGS[')]
         self.assertEqual(len(uncommented_lines), 2)  # Only user's 2 mappings
@@ -267,17 +267,17 @@ BRANCH_PREFIX=testuser
 BASE_DEV_PATH=/home/test/dev
 
 [[ -z ${(t)REPO_MAPPINGS} ]] && declare -gA REPO_MAPPINGS
-REPO_MAPPINGS[acmd]="Verkada-Android"
-REPO_MAPPINGS[icmd]="Verkada-iOS"
+REPO_MAPPINGS[acmd]="Company-Android"
+REPO_MAPPINGS[icmd]="Company-iOS"
 
 # Old format: using full repo names as keys
-REPO_CONFIGS[Verkada-Android]="./gradlew build|./gradlew test|./gradlew lint"
-REPO_CONFIGS[Verkada-iOS]="bundle exec fastlane build|bundle exec fastlane test|swiftlint"
+REPO_CONFIGS[Company-Android]="./gradlew build|./gradlew test|./gradlew lint"
+REPO_CONFIGS[Company-iOS]="bundle exec fastlane build|bundle exec fastlane test|swiftlint"
 
-REPO_MODULES[Verkada-Android]="app-core app-auth"
+REPO_MODULES[Company-Android]="app-core app-auth"
 
-REPO_IDE_CONFIGS[Verkada-Android]="android-studio||"
-REPO_IDE_CONFIGS[Verkada-iOS]="xcode-workspace|Verkada-iOS.xcworkspace|"
+REPO_IDE_CONFIGS[Company-Android]="android-studio||"
+REPO_IDE_CONFIGS[Company-iOS]="xcode-workspace|Company-iOS.xcworkspace|"
 '''
         normalizer = ConfigNormalizer(user_config, self.example_config)
 
@@ -293,7 +293,7 @@ REPO_IDE_CONFIGS[Verkada-iOS]="xcode-workspace|Verkada-iOS.xcworkspace|"
 
         self.assertEqual(len(normalizer.user_values['ide_configs']), 2)
         self.assertIn(('acmd', 'android-studio||'), normalizer.user_values['ide_configs'])
-        self.assertIn(('icmd', 'xcode-workspace|Verkada-iOS.xcworkspace|'),
+        self.assertIn(('icmd', 'xcode-workspace|Company-iOS.xcworkspace|'),
                       normalizer.user_values['ide_configs'])
 
         # Check normalized output uses shorthand
@@ -304,24 +304,24 @@ REPO_IDE_CONFIGS[Verkada-iOS]="xcode-workspace|Verkada-iOS.xcworkspace|"
         self.assertIn('REPO_CONFIGS[icmd]="bundle exec fastlane build|bundle exec fastlane test|swiftlint"', normalized)
         self.assertIn('REPO_MODULES[acmd]="app-core app-auth"', normalized)
         self.assertIn('REPO_IDE_CONFIGS[acmd]="android-studio||"', normalized)
-        self.assertIn('REPO_IDE_CONFIGS[icmd]="xcode-workspace|Verkada-iOS.xcworkspace|"', normalized)
+        self.assertIn('REPO_IDE_CONFIGS[icmd]="xcode-workspace|Company-iOS.xcworkspace|"', normalized)
 
         # Should NOT have full names as keys
-        self.assertNotIn('REPO_CONFIGS[Verkada-Android]', normalized)
-        self.assertNotIn('REPO_CONFIGS[Verkada-iOS]', normalized)
-        self.assertNotIn('REPO_MODULES[Verkada-Android]', normalized)
-        self.assertNotIn('REPO_IDE_CONFIGS[Verkada-Android]', normalized)
-        self.assertNotIn('REPO_IDE_CONFIGS[Verkada-iOS]', normalized)
+        self.assertNotIn('REPO_CONFIGS[Company-Android]', normalized)
+        self.assertNotIn('REPO_CONFIGS[Company-iOS]', normalized)
+        self.assertNotIn('REPO_MODULES[Company-Android]', normalized)
+        self.assertNotIn('REPO_IDE_CONFIGS[Company-Android]', normalized)
+        self.assertNotIn('REPO_IDE_CONFIGS[Company-iOS]', normalized)
 
     def test_mixed_shorthand_and_full_names(self):
         """Test handling mix of shorthand and full names."""
         user_config = '''#!/usr/bin/env zsh
 [[ -z ${(t)REPO_MAPPINGS} ]] && declare -gA REPO_MAPPINGS
-REPO_MAPPINGS[acmd]="Verkada-Android"
+REPO_MAPPINGS[acmd]="Company-Android"
 REPO_MAPPINGS[web]="MyApp-Web"
 
 # Mix: one uses full name, one uses shorthand
-REPO_CONFIGS[Verkada-Android]="./gradlew build|./gradlew test|./gradlew lint"
+REPO_CONFIGS[Company-Android]="./gradlew build|./gradlew test|./gradlew lint"
 REPO_CONFIGS[web]="npm run build|npm test|npm run lint"
 '''
         normalizer = ConfigNormalizer(user_config, self.example_config)

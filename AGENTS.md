@@ -67,7 +67,7 @@ worktree_templates/  # Template files for new worktrees
 - Both zsh plugins use lazy loading for performance
 - Repository detection works via git remote URL or directory path matching
 - Templates and dependency symlinks support complex multi-repo development workflows
-- Branch names are automatically prefixed with user's configured prefix (e.g., `kiyoshi/feature-name`)
+- Branch names are automatically prefixed with user's configured prefix (e.g., `username/feature-name`)
 - Commands support both explicit repository specification and auto-detection from current directory
 - Configuration is externalized to `~/.config/worktree-tools/config.zsh` for easy customization
 

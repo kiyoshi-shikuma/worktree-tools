@@ -17,4 +17,4 @@
 
 ### Fixed
 - macOS path canonicalization bug in worktree operations (symlink `/var` vs `/private/var`)
-- Multiple bugs in `setup_repos.sh` (see commits on kiyoshi/bugfixes branch)
+- Multiple bugs in `setup_repos.sh` (see bugfix commits in version history)
