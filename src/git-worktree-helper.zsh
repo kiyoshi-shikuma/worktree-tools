@@ -96,7 +96,7 @@ _define_git_worktree_functions() {
     # Function to resolve repo shorthand to full name
     resolve_repo_name() {
         local shorthand=$1
-        
+
         # Check if shorthand exists in mappings
         if [[ -n ${REPO_MAPPINGS[$shorthand]} ]]; then
             echo ${REPO_MAPPINGS[$shorthand]}
@@ -114,6 +114,49 @@ _define_git_worktree_functions() {
                 echo "Or run from within a configured repository directory"
                 return 1
             fi
+        fi
+    }
+
+    # Function to get nested directory name for a repo (if configured)
+    get_nested_dir_name() {
+        local repo_identifier=$1  # Can be shorthand or full repo name
+
+        # Initialize REPO_NESTED_WORKTREES if not declared
+        [[ -z ${(t)REPO_NESTED_WORKTREES} ]] && declare -gA REPO_NESTED_WORKTREES
+
+        # Try shorthand first, then full repo name
+        if [[ -n ${REPO_NESTED_WORKTREES[$repo_identifier]} ]]; then
+            echo ${REPO_NESTED_WORKTREES[$repo_identifier]}
+        else
+            echo ""
+        fi
+    }
+
+    # Function to resolve the actual worktree path (handles nested structure)
+    # Returns: outer_path|inner_path
+    # If not nested: returns path|path (same path for both)
+    resolve_worktree_paths() {
+        local repo_name=$1
+        local branch_name=$2
+        local repo_shorthand=$3  # Optional: if provided, check nested config by shorthand
+
+        local outer_path="$WORKTREES_PATH/$repo_name-$branch_name"
+        local nested_dir=""
+
+        # Check both shorthand and full repo name for nested config
+        if [[ -n $repo_shorthand ]]; then
+            nested_dir=$(get_nested_dir_name "$repo_shorthand")
+        fi
+        if [[ -z $nested_dir ]]; then
+            nested_dir=$(get_nested_dir_name "$repo_name")
+        fi
+
+        if [[ -n $nested_dir ]]; then
+            # Nested structure: outer_path/nested_dir
+            echo "$outer_path|$outer_path/$nested_dir"
+        else
+            # Regular structure: outer_path is the worktree
+            echo "$outer_path|$outer_path"
         fi
     }
 
@@ -170,7 +213,11 @@ _define_git_worktree_functions() {
         fi
 
         local bare_repo_path="$BARE_REPOS_PATH/$repo_name.git"
-        local worktree_path="$WORKTREES_PATH/$repo_name-$branch_name"
+
+        # Resolve worktree paths (handles nested structure)
+        local paths=$(resolve_worktree_paths "$repo_name" "$branch_name" "$repo_shorthand")
+        local outer_path="${paths%%|*}"
+        local inner_path="${paths##*|}"
 
         # Check if bare repo exists
         if [[ ! -d $bare_repo_path ]]; then
@@ -180,13 +227,17 @@ _define_git_worktree_functions() {
         fi
 
         # Check if worktree already exists
-        if [[ -d $worktree_path ]]; then
-            echo "❌ Error: Worktree already exists at $worktree_path"
+        if [[ -d $outer_path ]]; then
+            echo "❌ Error: Worktree already exists at $outer_path"
             return 1
         fi
 
-        # Create worktree directory if it doesn't exist
-        mkdir -p "$(dirname "$worktree_path")"
+        # Create outer directory structure for nested worktrees
+        if [[ "$outer_path" != "$inner_path" ]]; then
+            mkdir -p "$outer_path"
+        else
+            mkdir -p "$(dirname "$outer_path")"
+        fi
 
         # Prefix branch with branch prefix (if configured)
         local prefixed_branch
@@ -199,7 +250,12 @@ _define_git_worktree_functions() {
         echo "🌳 Creating worktree for $repo_name..."
         echo "📁 Bare repo: $bare_repo_path"
         echo "🌿 Branch: $prefixed_branch"
-        echo "📂 Worktree: $worktree_path"
+        if [[ "$outer_path" != "$inner_path" ]]; then
+            echo "📂 Worktree (outer): $outer_path"
+            echo "📂 Worktree (inner): $inner_path"
+        else
+            echo "📂 Worktree: $inner_path"
+        fi
 
         # Check if remote branch exists
         local remote_branch="origin/$prefixed_branch"
@@ -217,12 +273,12 @@ _define_git_worktree_functions() {
         if [[ $branch_exists_remotely == true ]]; then
             # Create worktree tracking the remote branch
             echo "🔗 Creating worktree with tracking to $remote_branch"
-            git -C "$bare_repo_path" worktree add "$worktree_path" -b "$prefixed_branch" --track "$remote_branch"
+            git -C "$bare_repo_path" worktree add "$inner_path" -b "$prefixed_branch" --track "$remote_branch"
         else
             # Check if local branch already exists
             if git -C "$bare_repo_path" show-ref --verify --quiet "refs/heads/$prefixed_branch"; then
                 echo "📝 Local branch '$prefixed_branch' already exists, using existing branch"
-                git -C "$bare_repo_path" worktree add "$worktree_path" "$prefixed_branch"
+                git -C "$bare_repo_path" worktree add "$inner_path" "$prefixed_branch"
             else
                 # Create worktree with new local branch based on main/master/develop
                 local main_branch="main"
@@ -232,22 +288,27 @@ _define_git_worktree_functions() {
                     main_branch="develop"
                 fi
                 echo "🌱 Creating worktree with new local branch from origin/$main_branch"
-                git -C "$bare_repo_path" worktree add "$worktree_path" -b "$prefixed_branch" "origin/$main_branch"
+                git -C "$bare_repo_path" worktree add "$inner_path" -b "$prefixed_branch" "origin/$main_branch"
             fi
         fi
         
         if [[ $? -eq 0 ]]; then
             echo -e "\033[32m✅ SUCCESS\033[0m"
-            echo "📂 Worktree created at: $worktree_path"
+            if [[ "$outer_path" != "$inner_path" ]]; then
+                echo "📂 Worktree created at: $outer_path"
+                echo "   └─ Git worktree: $inner_path"
+            else
+                echo "📂 Worktree created at: $inner_path"
+            fi
             if [[ $branch_exists_remotely == true ]]; then
                 echo "🔗 Branch is tracking: $remote_branch"
             fi
-            
+
             # Copy templates to the new worktree
-            copy_templates "$repo_name" "$worktree_path"
-            
-            echo "📂 Switching to: $worktree_path"
-            echo "WORKTREE_CD_TARGET:$worktree_path"
+            copy_templates "$repo_name" "$inner_path" "$repo_shorthand"
+
+            echo "📂 Switching to: $inner_path"
+            echo "WORKTREE_CD_TARGET:$inner_path"
         else
             echo -e "\033[31m❌ FAILED\033[0m"
             return 1
@@ -258,6 +319,7 @@ _define_git_worktree_functions() {
     copy_templates() {
         local repo_name=$1
         local worktree_path=$2
+        local repo_shorthand=$3  # Optional, not currently used
         
         local template_dir="$WORKTREE_TEMPLATES_PATH/$repo_name"
         
@@ -343,8 +405,22 @@ _define_git_worktree_functions() {
 
                 # Only show worktrees that are in our worktrees path (use canonical path comparison)
                 if [[ $current_worktree == $canonical_worktrees_path* ]] || [[ $current_worktree == $WORKTREES_PATH* ]]; then
-                    # Extract just the worktree name (last part of path)
-                    local worktree_name=$(basename "$current_worktree")
+                    # For nested worktrees, current_worktree might be like:
+                    # /path/worktrees/Repo-branch/Repo (inner)
+                    # We want to display: Repo-branch (outer)
+
+                    local display_path="$current_worktree"
+                    local parent_dir=$(dirname "$current_worktree")
+                    local inner_dir_name=$(basename "$current_worktree")
+
+                    # Check if this might be a nested worktree
+                    # If parent is in WORKTREES_PATH and inner name matches repo, use parent
+                    if [[ ($parent_dir == $canonical_worktrees_path* || $parent_dir == $WORKTREES_PATH*) &&
+                          $inner_dir_name == $repo_name ]]; then
+                        display_path="$parent_dir"
+                    fi
+
+                    local worktree_name=$(basename "$display_path")
                     echo "  $worktree_name ($current_branch)"
 
                     # Remember first worktree for cd
@@ -524,14 +600,29 @@ _define_git_worktree_functions() {
         local worktree_list=$(git -C "$bare_repo_path" worktree list --porcelain)
         local target_worktree=""
         local current_worktree=""
+        local outer_dir=""
 
         while IFS= read -r line; do
             if [[ $line == worktree* ]]; then
                 current_worktree=${line#worktree }
-                # Check if this worktree is in our worktrees path and matches exactly (canonical path comparison)
+                # Check if this worktree is in our worktrees path (canonical path comparison)
                 if [[ $current_worktree == $canonical_worktrees_path* ]] || [[ $current_worktree == $WORKTREES_PATH* ]]; then
-                    local worktree_basename=$(basename "$current_worktree")
-                    if [[ $worktree_basename == $worktree_name ]]; then
+                    # Check for nested structure
+                    local parent_dir=$(dirname "$current_worktree")
+                    local inner_dir_name=$(basename "$current_worktree")
+                    local check_name=""
+
+                    # If nested (parent is in WORKTREES_PATH and inner name matches repo)
+                    if [[ ($parent_dir == $canonical_worktrees_path* || $parent_dir == $WORKTREES_PATH*) &&
+                          $inner_dir_name == $repo_name ]]; then
+                        check_name=$(basename "$parent_dir")
+                        outer_dir="$parent_dir"
+                    else
+                        check_name=$(basename "$current_worktree")
+                        outer_dir=""
+                    fi
+
+                    if [[ $check_name == $worktree_name ]]; then
                         target_worktree=$current_worktree
                         break
                     fi
@@ -544,10 +635,19 @@ _define_git_worktree_functions() {
 
             # Check if we're currently in the worktree we want to remove
             local current_dir=$(pwd)
-            if [[ $current_dir == $target_worktree* ]]; then
+            local check_dir="$target_worktree"
+            if [[ -n $outer_dir ]]; then
+                check_dir="$outer_dir"
+            fi
+
+            if [[ $current_dir == $check_dir* ]]; then
                 echo "❌ Error: Cannot remove worktree while you are inside it"
                 echo "📂 Current directory: $current_dir"
-                echo "🗑️  Target worktree: $target_worktree"
+                if [[ -n $outer_dir ]]; then
+                    echo "🗑️  Target worktree: $outer_dir"
+                else
+                    echo "🗑️  Target worktree: $target_worktree"
+                fi
                 echo "💡 Please navigate outside this worktree first, then try again"
                 return 1
             fi
@@ -556,7 +656,17 @@ _define_git_worktree_functions() {
             git -C "$bare_repo_path" worktree remove "$target_worktree"
 
             if [[ $? -eq 0 ]]; then
-                echo "✅ Worktree removed successfully"
+                # If nested structure, also remove outer directory if empty
+                if [[ -n $outer_dir && -d $outer_dir ]]; then
+                    if [[ -z "$(ls -A "$outer_dir" 2>/dev/null)" ]]; then
+                        rmdir "$outer_dir"
+                        echo "✅ Worktree and outer directory removed successfully"
+                    else
+                        echo "✅ Worktree removed successfully (outer directory not empty)"
+                    fi
+                else
+                    echo "✅ Worktree removed successfully"
+                fi
             else
                 echo "❌ Failed to remove worktree"
                 return 1
@@ -570,8 +680,19 @@ _define_git_worktree_functions() {
                 if [[ $line == worktree* ]]; then
                     current_worktree=${line#worktree }
                     if [[ $current_worktree == $canonical_worktrees_path* ]] || [[ $current_worktree == $WORKTREES_PATH* ]]; then
-                        local worktree_basename=$(basename "$current_worktree")
-                        echo "  $worktree_basename"
+                        # Check for nested structure
+                        local parent_dir=$(dirname "$current_worktree")
+                        local inner_dir_name=$(basename "$current_worktree")
+                        local display_name=""
+
+                        if [[ ($parent_dir == $canonical_worktrees_path* || $parent_dir == $WORKTREES_PATH*) &&
+                              $inner_dir_name == $repo_name ]]; then
+                            display_name=$(basename "$parent_dir")
+                        else
+                            display_name=$(basename "$current_worktree")
+                        fi
+
+                        echo "  $display_name"
                     fi
                 fi
             done <<< "$worktree_list"

@@ -96,6 +96,18 @@ BASE_DEV_PATH="$HOME/dev"
 # REPO_MODULES[web]="packages/ui packages/api packages/utils"
 
 # =============================================================================
+# Optional: Nested worktree directories (uncomment to enable)
+# =============================================================================
+
+# Creates worktrees nested in a subdirectory matching the repo name
+# Example: worktrees/Company-iOS-<branch>/Company-iOS/ instead of worktrees/Company-iOS-<branch>/
+# Format: shorthand => inner_directory_name
+
+[[ -z ${(t)REPO_NESTED_WORKTREES} ]] && declare -gA REPO_NESTED_WORKTREES
+
+# REPO_NESTED_WORKTREES[ios]="Company-iOS"
+
+# =============================================================================
 # Auto-computed paths (don't change unless you have custom structure)
 # =============================================================================
 

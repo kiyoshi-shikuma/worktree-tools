@@ -934,6 +934,238 @@ EOF
 }
 
 # =============================================================================
+# Nested Worktree Tests
+# =============================================================================
+
+# Test 30: Nested worktree path resolution
+test_nested_worktree_path_resolution() {
+  test_start "Nested worktree path resolution"
+
+  local test_dir="$TEST_ROOT/test30"
+  mkdir -p "$test_dir/.config/worktree-tools"
+
+  # Create config WITH nested worktree configuration
+  cat > "$test_dir/.config/worktree-tools/config.zsh" <<EOF
+[[ -z \${(t)REPO_MAPPINGS} ]] && declare -gA REPO_MAPPINGS
+[[ -z \${(t)REPO_NESTED_WORKTREES} ]] && declare -gA REPO_NESTED_WORKTREES
+REPO_MAPPINGS[nested]="NestedRepo"
+REPO_NESTED_WORKTREES[nested]="NestedRepo"
+BASE_DEV_PATH="$test_dir"
+WORKTREES_PATH="$test_dir/worktrees"
+EOF
+
+  # Test path resolution for nested repo
+  local result=$(HOME="$test_dir" zsh -c '
+    source "'$SCRIPT_DIR'/git-worktree-helper.zsh"
+    _load_git_worktree_impl
+    paths=$(resolve_worktree_paths "NestedRepo" "feature" "nested")
+    outer=${paths%%|*}
+    inner=${paths##*|}
+    echo "OUTER:$outer"
+    echo "INNER:$inner"
+  ')
+
+  local outer=$(echo "$result" | grep "^OUTER:" | cut -d: -f2)
+  local inner=$(echo "$result" | grep "^INNER:" | cut -d: -f2)
+
+  if [[ "$outer" == "$test_dir/worktrees/NestedRepo-feature" && \
+        "$inner" == "$test_dir/worktrees/NestedRepo-feature/NestedRepo" ]]; then
+    pass "Nested worktree paths resolved correctly"
+  else
+    fail "Path resolution incorrect" "Outer: $outer, Inner: $inner"
+  fi
+}
+
+# Test 31: Non-nested worktree path resolution (backward compat)
+test_non_nested_worktree_path_resolution() {
+  test_start "Non-nested worktree path resolution (backward compat)"
+
+  local test_dir="$TEST_ROOT/test31"
+  mkdir -p "$test_dir/.config/worktree-tools"
+
+  # Create config WITHOUT nested worktree configuration
+  cat > "$test_dir/.config/worktree-tools/config.zsh" <<EOF
+[[ -z \${(t)REPO_MAPPINGS} ]] && declare -gA REPO_MAPPINGS
+REPO_MAPPINGS[regular]="RegularRepo"
+BASE_DEV_PATH="$test_dir"
+WORKTREES_PATH="$test_dir/worktrees"
+EOF
+
+  # Test path resolution for regular repo
+  local result=$(HOME="$test_dir" zsh -c '
+    source "'$SCRIPT_DIR'/git-worktree-helper.zsh"
+    _load_git_worktree_impl
+    paths=$(resolve_worktree_paths "RegularRepo" "feature" "regular")
+    outer=${paths%%|*}
+    inner=${paths##*|}
+    echo "OUTER:$outer"
+    echo "INNER:$inner"
+  ')
+
+  local outer=$(echo "$result" | grep "^OUTER:" | cut -d: -f2)
+  local inner=$(echo "$result" | grep "^INNER:" | cut -d: -f2)
+
+  if [[ "$outer" == "$test_dir/worktrees/RegularRepo-feature" && \
+        "$inner" == "$test_dir/worktrees/RegularRepo-feature" ]]; then
+    pass "Non-nested worktree paths resolved correctly (backward compatible)"
+  else
+    fail "Path resolution incorrect" "Outer: $outer, Inner: $inner"
+  fi
+}
+
+# Test 32: Create nested worktree
+test_nested_worktree_creation() {
+  test_start "Create nested worktree structure"
+
+  local test_dir="$TEST_ROOT/test32"
+  local bare_repo=$(setup_bare_repo_for_worktree_tests "$test_dir" "nested-repo")
+
+  # Create config with nested worktree
+  mkdir -p "$test_dir/.config/worktree-tools"
+  cat > "$test_dir/.config/worktree-tools/config.zsh" <<EOF
+[[ -z \${(t)REPO_MAPPINGS} ]] && declare -gA REPO_MAPPINGS
+[[ -z \${(t)REPO_NESTED_WORKTREES} ]] && declare -gA REPO_NESTED_WORKTREES
+REPO_MAPPINGS[nested]="nested-repo"
+REPO_NESTED_WORKTREES[nested]="nested-repo"
+BRANCH_PREFIX="testuser"
+BASE_DEV_PATH="$test_dir"
+BARE_REPOS_PATH="$test_dir/.repos"
+WORKTREES_PATH="$test_dir/worktrees"
+WORKTREE_TEMPLATES_PATH="$test_dir/worktree_templates"
+EOF
+
+  # Create nested worktree
+  HOME="$test_dir" zsh -c '
+    source "'$SCRIPT_DIR'/git-worktree-helper.zsh"
+    _load_git_worktree_impl
+    add_worktree "nested" "nested-feature" >/dev/null 2>&1
+  '
+
+  # Verify structure
+  local outer_path="$test_dir/worktrees/nested-repo-nested-feature"
+  local inner_path="$outer_path/nested-repo"
+
+  if [[ -d "$outer_path" ]] && [[ -f "$inner_path/.git" ]] && [[ -f "$inner_path/README.md" ]]; then
+    pass "Nested worktree structure created correctly"
+  else
+    fail "Nested worktree structure incorrect" "Outer: $outer_path, Inner: $inner_path"
+  fi
+}
+
+# Test 33: List nested worktrees
+test_nested_worktree_list() {
+  test_start "List nested worktrees (display outer name)"
+
+  local test_dir="$TEST_ROOT/test33"
+  local bare_repo=$(setup_bare_repo_for_worktree_tests "$test_dir" "nested-repo")
+
+  # Create config with nested worktree
+  mkdir -p "$test_dir/.config/worktree-tools"
+  cat > "$test_dir/.config/worktree-tools/config.zsh" <<EOF
+[[ -z \${(t)REPO_MAPPINGS} ]] && declare -gA REPO_MAPPINGS
+[[ -z \${(t)REPO_NESTED_WORKTREES} ]] && declare -gA REPO_NESTED_WORKTREES
+REPO_MAPPINGS[nested]="nested-repo"
+REPO_NESTED_WORKTREES[nested]="nested-repo"
+BRANCH_PREFIX="testuser"
+BASE_DEV_PATH="$test_dir"
+BARE_REPOS_PATH="$test_dir/.repos"
+WORKTREES_PATH="$test_dir/worktrees"
+EOF
+
+  # Create nested worktree
+  HOME="$test_dir" zsh -c '
+    source "'$SCRIPT_DIR'/git-worktree-helper.zsh"
+    _load_git_worktree_impl
+    add_worktree "nested" "list-test" >/dev/null 2>&1
+  '
+
+  # List worktrees
+  local output=$(HOME="$test_dir" zsh -c '
+    source "'$SCRIPT_DIR'/git-worktree-helper.zsh"
+    _load_git_worktree_impl
+    list_worktrees "nested" 2>&1
+  ')
+
+  # Should show outer directory name
+  if echo "$output" | grep -q "nested-repo-list-test"; then
+    pass "Nested worktree listed correctly (outer name shown)"
+  else
+    fail "List output incorrect" "$output"
+  fi
+}
+
+# Test 34: Remove nested worktree
+test_nested_worktree_removal() {
+  test_start "Remove nested worktree (cleans up outer dir)"
+
+  local test_dir="$TEST_ROOT/test34"
+  local bare_repo=$(setup_bare_repo_for_worktree_tests "$test_dir" "nested-repo")
+
+  # Create config with nested worktree
+  mkdir -p "$test_dir/.config/worktree-tools"
+  cat > "$test_dir/.config/worktree-tools/config.zsh" <<EOF
+[[ -z \${(t)REPO_MAPPINGS} ]] && declare -gA REPO_MAPPINGS
+[[ -z \${(t)REPO_NESTED_WORKTREES} ]] && declare -gA REPO_NESTED_WORKTREES
+REPO_MAPPINGS[nested]="nested-repo"
+REPO_NESTED_WORKTREES[nested]="nested-repo"
+BRANCH_PREFIX="testuser"
+BASE_DEV_PATH="$test_dir"
+BARE_REPOS_PATH="$test_dir/.repos"
+WORKTREES_PATH="$test_dir/worktrees"
+EOF
+
+  # Create and then remove nested worktree
+  HOME="$test_dir" zsh -c '
+    source "'$SCRIPT_DIR'/git-worktree-helper.zsh"
+    _load_git_worktree_impl
+    add_worktree "nested" "remove-test" >/dev/null 2>&1
+    remove_worktree "nested" "nested-repo-remove-test" >/dev/null 2>&1
+  '
+
+  # Verify both inner and outer are removed
+  local outer_path="$test_dir/worktrees/nested-repo-remove-test"
+  if [[ ! -d "$outer_path" ]]; then
+    pass "Nested worktree and outer directory removed"
+  else
+    fail "Nested worktree outer directory still exists" "Path: $outer_path"
+  fi
+}
+
+# Test 35: Backward compatibility - existing tests work without nested config
+test_backward_compatibility_no_nested_config() {
+  test_start "Backward compatibility without nested config"
+
+  local test_dir="$TEST_ROOT/test35"
+  local bare_repo=$(setup_bare_repo_for_worktree_tests "$test_dir" "compat-repo")
+
+  # Create config WITHOUT any nested configuration
+  mkdir -p "$test_dir/.config/worktree-tools"
+  cat > "$test_dir/.config/worktree-tools/config.zsh" <<EOF
+[[ -z \${(t)REPO_MAPPINGS} ]] && declare -gA REPO_MAPPINGS
+REPO_MAPPINGS[compat]="compat-repo"
+BRANCH_PREFIX="testuser"
+BASE_DEV_PATH="$test_dir"
+BARE_REPOS_PATH="$test_dir/.repos"
+WORKTREES_PATH="$test_dir/worktrees"
+EOF
+
+  # Create regular worktree
+  HOME="$test_dir" zsh -c '
+    source "'$SCRIPT_DIR'/git-worktree-helper.zsh"
+    _load_git_worktree_impl
+    add_worktree "compat" "compat-feature" >/dev/null 2>&1
+  '
+
+  # Verify regular (non-nested) structure
+  local worktree_path="$test_dir/worktrees/compat-repo-compat-feature"
+  if [[ -f "$worktree_path/.git" ]] && [[ -f "$worktree_path/README.md" ]]; then
+    pass "Regular worktree works without nested config (backward compatible)"
+  else
+    fail "Regular worktree broken" "Path: $worktree_path"
+  fi
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -984,6 +1216,14 @@ main() {
   test_no_repo_mappings
   test_no_ide_config_fallback
   test_empty_repo_mappings
+
+  # Run nested worktree tests
+  test_nested_worktree_path_resolution
+  test_non_nested_worktree_path_resolution
+  test_nested_worktree_creation
+  test_nested_worktree_list
+  test_nested_worktree_removal
+  test_backward_compatibility_no_nested_config
 
   # Summary
   echo ""
