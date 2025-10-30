@@ -2,28 +2,46 @@
 
 Shell scripts and Oh My Zsh plugins for managing git worktrees and CI workflows across multiple repositories.
 
-## Why Worktrees?
+**TL;DR:** Work on multiple branches simultaneously without stashing, switching, or losing IDE state. [Why worktrees?](#why-worktrees)
 
-Git worktrees let you work on multiple branches simultaneously without constant switching or maintaining multiple clones. Instead of:
-- Stashing changes to switch branches
-- Maintaining separate repo clones
-- Losing IDE state when switching
+## Table of Contents
 
-You get:
-- Multiple branches checked out at once in separate directories
-- Each worktree maintains its own working directory and IDE state
-- Instant switching between branches using `cd` or directory bookmarks
-- Shared git history (one `.git` directory for all worktrees)
-
-## What This Repo Provides
-
-- **Setup script** to convert existing repos or clone new ones into bare repo + worktree structure
-- **Zsh commands** for creating, switching, listing, and removing worktrees
-- **Template system** to copy config files automatically to new worktrees
-- **CI shortcuts** (build/test/lint) that work across different repo types
-- **Smart detection** of which repo you're in
+- [Quick Start](#quick-start)
+  - [Prerequisites](#prerequisites)
+  - [1. Setup Repositories](#1-setup-repositories)
+  - [2. Install Zsh Plugins](#2-install-zsh-plugins)
+  - [3. Configure and Verify](#3-configure-and-verify)
+  - [4. Create Worktrees](#4-create-worktrees)
+- [Why Worktrees?](#why-worktrees)
+- [Recommended Workflow](#recommended-workflow)
+  - [Long-Lived Worktrees](#long-lived-worktrees)
+  - [Fast Switching with Bookmarks](#fast-switching-with-bookmarks)
+  - [Typical Development Cycle](#typical-development-cycle-parallel-work-across-worktrees)
+  - [Recommended Tools](#recommended-tools)
+- [Worktree Commands](#worktree-commands)
+- [CI Commands](#ci-commands)
+- [Config Migrations](#config-migrations)
+- [Setup Script Options](#setup-script-options)
+- [Troubleshooting](#troubleshooting)
+- [Appendix: Using Git Worktrees Without Plugins](#appendix-using-git-worktrees-without-plugins)
+- [Appendix: Why Bare Repos?](#appendix-why-bare-repos)
+- [Contributing](#contributing)
+- [Uninstallation](#uninstallation)
 
 ## Quick Start
+
+### Prerequisites
+
+**Oh My Zsh is required** for the zsh plugins. Install it first:
+
+```bash
+# Install Oh My Zsh (if not already installed)
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+```
+
+**📚 More info:** [Oh My Zsh website](https://ohmyz.sh/)
+
+> **Don't want Oh My Zsh?** See [Appendix: Using Git Worktrees Without Plugins](#appendix-using-git-worktrees-without-plugins) for plain git commands.
 
 ### 1. Setup Repositories
 
@@ -32,39 +50,39 @@ You get:
 cd ~/dev
 
 # Clone this repo
-git clone <this-repo-url> worktree-tools
+git clone https://github.com/kiyoshi-shikuma/worktree-tools.git worktree-tools
 
-# Setup your repositories (from existing local repos or remote URLs)
+# Setup your repositories (from remote URLs or local repos)
 ./worktree-tools/scripts/setup_repos.sh --repos "git@github.com:org/android.git,git@github.com:org/ios.git"
 
 # Or from existing local repos:
 ./worktree-tools/scripts/setup_repos.sh --repos "/path/to/existing/android,/path/to/existing/ios"
 ```
 
-This creates:
+**This creates:**
 ```
 ~/dev/
 ├── .repos/              # Bare repositories (shared git history)
 ├── worktrees/           # Your working directories
 ├── worktree_templates/  # Optional template files
-└── worktree-tools/      # This repo (cloned here)
+└── worktree-tools/      # This repo
 ```
 
-### 2. Install Plugins
+### 2. Install Zsh Plugins
 
 ```bash
 cd worktree-tools
 make install
-# Follow prompts to edit config, then restart terminal
+# Follow the prompts to edit config, then restart terminal
 ```
 
-**Note**: The install script creates symlinks from `~/.oh-my-zsh/custom/` to the scripts in this repo, so updating is simple:
+The installer creates symlinks (not copies), so updates are easy:
 ```bash
 cd ~/dev/worktree-tools
-git pull  # Updates take effect immediately (or after restarting terminal)
+git pull  # Changes take effect after restarting terminal
 ```
 
-### 3. Configure
+### 3. Configure and Verify
 
 Edit `~/.config/worktree-tools/config.zsh`:
 
@@ -84,29 +102,61 @@ REPO_MAPPINGS[icmd]="Company-iOS"
 # REPO_IDE_CONFIGS[icmd]="xcode-workspace|Company-iOS.xcworkspace|"
 ```
 
+Restart your terminal and verify installation:
+```bash
+git_worktree help  # Shows available commands
+wt-list            # Lists worktrees (if you created any)
+```
+
 ### 4. Create Worktrees
 
-```bash
-# Create 2-3 long-lived worktrees for whatever work you want
-wt-add acmd develop     # Tracking develop branch
-wt-add acmd working     # Your main development work
-wt-add acmd llmagent    # LLM agent work, PR reviews, experiments, etc.
+The setup script already created a `develop` worktree for you. Add more for your workflow:
 
-wt-add icmd develop
+```bash
+# Create 2-3 additional long-lived worktrees for different types of work
+wt-add acmd working     # Your main development work
+wt-add acmd review      # PR reviews and addressing review comments
+wt-add acmd llmagent    # LLM agent work, experiments, quick fixes
+
 wt-add icmd working
+wt-add icmd review
+wt-add icmd llmagent
 ```
 
 **Important**: The same branch cannot be checked out in multiple worktrees simultaneously. This can be a minor inconvenience with tools like Graphite that auto-prune merged branches, but you can just switch off the branch and delete/prune it later.
+
+## Why Worktrees?
+
+Git worktrees let you work on multiple branches simultaneously without constant switching or maintaining multiple clones.
+
+**Instead of:**
+- Stashing changes to switch branches
+- Maintaining separate repo clones
+- Losing IDE state when switching
+
+**You get:**
+- Multiple branches checked out at once in separate directories
+- Each worktree maintains its own working directory and IDE state
+- Instant switching between branches using `cd` or directory bookmarks
+- Shared git history (one `.git` directory for all worktrees)
+
+**What this repo adds:**
+- Simple commands for creating/managing worktrees
+- Template system to auto-copy config files to new worktrees
+- CI shortcuts (build/test/lint) that work across repo types
+- Smart repo detection
+
+**[Learn more about the bare repo approach](#appendix-why-bare-repos)**
 
 ## Recommended Workflow
 
 ### Long-Lived Worktrees
 
-Keep 2-3 long-lived worktrees per repository for different types of work. Common examples:
-- **`develop`** - Tracking the develop branch, pulling latest changes
+Keep 2-4 long-lived worktrees per repository for different types of work. Common examples:
+- **`develop`** - Tracking the develop branch, pulling latest changes (created by setup script)
 - **`working`** - Your primary development branch
-- **`llmagent`** - LLM agent work, experiments, quick changes
-- **`prreview`** - Reviewing PRs or addressing comments for your own
+- **`review`** - Reviewing PRs or addressing review comments
+- **`llmagent`** - LLM agent work, experiments, quick fixes
 
 These are just examples - use whatever workflow fits your needs!
 
@@ -165,7 +215,7 @@ git checkout -b your-username/refactor-auth
 # Let it run autonomously...
 
 # Terminal 2: Launch another Claude agent on bug fixes
-g prreview
+g review
 git checkout -b your-username/fix-login-bug
 # Launch Claude Code agent to fix bug
 # Let it run autonomously...
@@ -354,6 +404,47 @@ git -C .repos/Repo-Name.git worktree prune
 ### Commands Not Found
 Make sure config is loaded: `source ~/.config/worktree-tools/config.zsh`
 
+## Appendix: Using Git Worktrees Without Plugins
+
+If you don't want to use Oh My Zsh plugins, you can use plain git worktree commands directly with the bare repo structure created by `setup_repos.sh`.
+
+### Basic Git Worktree Commands
+
+Assuming you've run `setup_repos.sh` which creates bare repos in `~/dev/.repos/`:
+
+```bash
+# List all worktrees
+git -C ~/dev/.repos/MyRepo.git worktree list
+
+# Add a new worktree (creates branch automatically)
+git -C ~/dev/.repos/MyRepo.git worktree add ~/dev/worktrees/MyRepo-feature-name -b username/feature-name
+
+# Or add worktree from existing branch
+git -C ~/dev/.repos/MyRepo.git worktree add ~/dev/worktrees/MyRepo-existing-branch username/existing-branch
+
+# Remove a worktree
+git -C ~/dev/.repos/MyRepo.git worktree remove ~/dev/worktrees/MyRepo-feature-name
+
+# Or just delete the directory and prune
+rm -rf ~/dev/worktrees/MyRepo-feature-name
+git -C ~/dev/.repos/MyRepo.git worktree prune
+
+# Switch to a worktree (just use cd)
+cd ~/dev/worktrees/MyRepo-feature-name
+```
+
+### What You'll Miss Without the Plugins
+
+The Oh My Zsh plugins provide:
+- **Shorter commands**: `wt-add repo feature` vs long git paths
+- **Auto-detection**: Commands detect which repo you're in
+- **Name normalization**: Consistent worktree directory naming
+- **Templates**: Auto-copy config files to new worktrees
+- **CI shortcuts**: `ci`, `test`, `lint` commands that work across repos
+- **IDE launcher**: `ide` command to open the right IDE
+
+But if you prefer plain git commands, the bare repo structure still gives you all the core worktree benefits!
+
 ## Appendix: Why Bare Repos?
 
 This tool uses **bare repositories** (`.repos/`) as the source of truth. Here's why this approach is better than alternatives:
@@ -423,7 +514,7 @@ Your worktrees in `worktrees/` are the "normal" working directories where you ac
 
 This is an ongoing project. Found a bug or want a feature?
 
-- **Issues**: File at `[https://github.com/kiyoshi-shikuma/worktree-tools/issues]`
+- **Issues**: [File an issue](https://github.com/kiyoshi-shikuma/worktree-tools/issues)
 
 Contributions welcome!
 

@@ -100,8 +100,8 @@ install: check-install
 	@echo "   🆕 Or open a new terminal window"
 	@echo ""
 	@echo "3. Verify installation:"
-	@echo "   🧪 Test: wt-add --help"
 	@echo "   📋 Help: git_worktree help"
+	@echo "   📋 List: wt-list"
 	@echo ""
 	@echo "🎉 Happy worktree-ing!"
 
